@@ -47,7 +47,7 @@ function createSlidesFromBanners(banners) {
     id: banner.id,
     img: banner.image,
     title: banner.title,
-    desc: `${banner.categoryName} collection par special banner offer.`,
+    desc: `Special banner offer for the ${banner.categoryName} collection.`,
     price: getOfferText(banner.discountPercentage),
     tag: getOfferText(banner.discountPercentage),
     categoryName: banner.categoryName,

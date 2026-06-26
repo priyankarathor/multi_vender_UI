@@ -70,7 +70,7 @@ function createSlidesFromBanners(banners) {
     id: banner.id,
     title: banner.title,
     highlight: banner.categoryName,
-    description: `Latest ${banner.categoryName} collection par special offer available hai.`,
+    description: `Special offers are available on the latest ${banner.categoryName} collection.`,
     image: banner.image,
     badge: banner.categoryName,
     offer: getOfferText(banner.discountPercentage),

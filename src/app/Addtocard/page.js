@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loginUser } from "../apis/login/login";
+import { getCartItems } from "../apis/cart/cart";
 import {
   Heart,
   Minus,
@@ -19,12 +20,8 @@ import {
 
 export default function CartPage() {
   const router = useRouter();
-  const [cartItems, setCartItems] = useState(() => {
-    if (typeof window === "undefined") return [];
-
-    const savedItems = JSON.parse(localStorage.getItem("cartItems") || "[]");
-    return Array.isArray(savedItems) ? savedItems : [];
-  });
+  const [cartItems, setCartItems] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginForm, setLoginForm] = useState({
@@ -33,8 +30,20 @@ export default function CartPage() {
   });
 
   useEffect(() => {
-    localStorage.setItem("cartItems", JSON.stringify(cartItems));
-  }, [cartItems]);
+    const fetchCart = async () => {
+      try {
+        const cid = typeof window !== "undefined" ? localStorage.getItem("cid") : null;
+        const res = await getCartItems({ cid });
+        setCartItems(res.data?.data || []);
+      } catch (error) {
+        console.log(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCart();
+  }, []);
 
   const recommendedProducts = [
     {
@@ -79,60 +88,42 @@ export default function CartPage() {
     },
   ];
 
-  const increaseQty = (id) => {
+  const getTitle = (item) => item.pid?.productName || item.pid?.itemName || "Untitled Product";
+
+  const getImage = (item) =>
+    item.variantId?.images?.[0] || item.pid?.images?.[0] || "https://via.placeholder.com/150";
+
+  const getPrice = (item) => item.variantId?.offer?.salePrice || item.variantId?.offer?.sellingPrice || 0;
+
+  const getMrp = (item) => item.variantId?.offer?.mrp || 0;
+
+  const getQty = (item) => item.qty || 1;
+
+  const increaseQty = (item) => {
     setCartItems((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? { ...item, qty: (item.qty || item.quantity || 1) + 1 }
-          : item
+      prev.map((i) =>
+        i._id === item._id ? { ...i, qty: getQty(item) + 1 } : i
       )
     );
   };
 
-  const decreaseQty = (id) => {
+  const decreaseQty = (item) => {
+    const currentQty = getQty(item);
+    if (currentQty <= 1) return;
+
     setCartItems((prev) =>
-      prev.map((item) =>
-        item.id === id && (item.qty || item.quantity || 1) > 1
-          ? { ...item, qty: (item.qty || item.quantity || 1) - 1 }
-          : item
+      prev.map((i) =>
+        i._id === item._id ? { ...i, qty: currentQty - 1 } : i
       )
     );
   };
 
-  const removeItem = (id) => {
-    setCartItems(cartItems.filter((item) => item.id !== id));
-  };
-
-  const parsePrice = (price) => {
-    if (typeof price === "number") return price;
-    return Number(String(price).replace(/[^\d]/g, "")) || 0;
+  const removeItem = (item) => {
+    setCartItems((prev) => prev.filter((i) => i._id !== item._id));
   };
 
   const addRecommendedToCart = (product) => {
-    const productPrice = parsePrice(product.price);
-    const cartProduct = {
-      id: product.id,
-      title: product.title,
-      name: product.title,
-      price: productPrice,
-      qty: 1,
-      image: product.image,
-      delivery: "Tomorrow",
-    };
-
-    setCartItems((prev) => {
-      const existingItem = prev.find((item) => item.id === cartProduct.id);
-
-      if (existingItem) {
-        return prev.map((item) =>
-          item.id === cartProduct.id
-            ? { ...item, qty: (item.qty || item.quantity || 1) + 1 }
-            : item
-        );
-      }
-
-      return [...prev, cartProduct];
-    });
+    console.log("Add to cart clicked:", product);
   };
 
   const isUserLoggedIn = () => {
@@ -195,12 +186,20 @@ export default function CartPage() {
   };
 
   const subtotal = cartItems.reduce(
-    (acc, item) => acc + item.price * (item.qty || item.quantity || 1),
+    (acc, item) => acc + getPrice(item) * getQty(item),
     0
   );
 
   const tax = Math.round(subtotal * 0.05);
   const total = subtotal + tax;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-gray-500">Loading cart...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f5f5f5] py-6 px-3 md:px-5">
@@ -220,7 +219,10 @@ export default function CartPage() {
                 </p>
               </div>
 
-              <button className="hidden md:block text-sm text-blue-600 font-medium">
+              <button
+                onClick={() => router.push("/")}
+                className="hidden md:block text-sm text-blue-600 font-medium"
+              >
                 Continue Shopping
               </button>
             </div>
@@ -231,107 +233,125 @@ export default function CartPage() {
             <div className="bg-white border border-gray-200 rounded-2xl p-8 text-center">
               <p className="text-gray-700 font-semibold">Your cart is empty</p>
               <button
-                onClick={() => router.push("/shop")}
+                onClick={() => router.push("/")}
                 className="mt-4 px-5 h-10 rounded-xl bg-black text-white text-sm font-semibold"
               >
                 Continue Shopping
               </button>
             </div>
-          ) : cartItems.map((item) => (
-            <div
-              key={item.id}
-              className="bg-white border border-gray-200 rounded-2xl p-4 hover:shadow-md transition"
-            >
-              <div className="flex gap-4">
-                {/* IMAGE */}
-                <div className="w-28 h-28 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
-                  <img
-                    src={item.image}
-                    alt={item.title}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
+          ) : (
+            cartItems.map((item) => {
+              const title = getTitle(item);
+              const image = getImage(item);
+              const price = getPrice(item);
+              const mrp = getMrp(item);
+              const quantity = getQty(item);
+              const lineTotal = price * quantity;
 
-                {/* CONTENT */}
-                <div className="flex-1">
-                  {/* TITLE */}
-                  <h2 className="text-[15px] font-semibold text-gray-900 line-clamp-2">
-                      {item.title}
-                  </h2>
-
-                  {/* RATING */}
-                  <div className="flex items-center gap-1 mt-1">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <Star
-                        key={star}
-                        size={12}
-                        className="fill-yellow-400 text-yellow-400"
+              return (
+                <div
+                  key={item._id}
+                  className="bg-white border border-gray-200 rounded-2xl p-4 hover:shadow-md transition"
+                >
+                  <div className="flex gap-4">
+                    {/* IMAGE */}
+                    <div className="w-28 h-28 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
+                      <img
+                        src={image}
+                        alt={title}
+                        className="w-full h-full object-cover"
                       />
-                    ))}
-
-                    <span className="text-[11px] text-gray-500 ml-1">
-                      4.5
-                    </span>
-                  </div>
-
-                  {/* DELIVERY */}
-                  <p className="text-[12px] text-green-600 font-medium mt-2">
-                    FREE Delivery {item.delivery || "Tomorrow"}
-                  </p>
-
-                  {/* PRICE */}
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-xl font-bold text-gray-900">
-                      ₹{item.price.toLocaleString()}
-                    </span>
-
-                    <span className="text-sm line-through text-gray-400">
-                      ₹{(item.price + 5000).toLocaleString()}
-                    </span>
-                  </div>
-
-                  {/* ACTIONS */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
-                    {/* QTY */}
-                    <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-                      <button
-                        onClick={() => decreaseQty(item.id)}
-                        className="w-9 h-9 flex items-center justify-center hover:bg-gray-100"
-                      >
-                        <Minus size={14} />
-                      </button>
-
-                      <span className="w-10 text-center text-sm font-medium">
-                        {item.qty || item.quantity || 1}
-                      </span>
-
-                      <button
-                        onClick={() => increaseQty(item.id)}
-                        className="w-9 h-9 flex items-center justify-center hover:bg-gray-100"
-                      >
-                        <Plus size={14} />
-                      </button>
                     </div>
 
-                    {/* BUTTONS */}
-                    <div className="flex items-center gap-2">
-                      <button className="h-9 px-4 rounded-lg border border-gray-200 text-sm font-medium hover:bg-gray-50 transition">
-                        Save
-                      </button>
+                    {/* CONTENT */}
+                    <div className="flex-1">
+                      {/* TITLE */}
+                      <h2 className="text-[15px] font-semibold text-gray-900 line-clamp-2">
+                        {title}
+                      </h2>
 
-                      <button
-                        onClick={() => removeItem(item.id)}
-                        className="h-9 px-4 rounded-lg bg-red-50 text-red-600 text-sm font-medium hover:bg-red-100 transition flex items-center gap-2"
-                      >
-                        <Trash2 size={14} />
-                        Remove
-                      </button>
+                      {/* RATING */}
+                      <div className="flex items-center gap-1 mt-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star
+                            key={star}
+                            size={12}
+                            className="fill-yellow-400 text-yellow-400"
+                          />
+                        ))}
+
+                        <span className="text-[11px] text-gray-500 ml-1">
+                          4.5
+                        </span>
+                      </div>
+
+                      {/* DELIVERY */}
+                      <p className="text-[12px] text-green-600 font-medium mt-2">
+                        FREE Delivery Tomorrow
+                      </p>
+
+                      {/* PRICE */}
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-xl font-bold text-gray-900">
+                          ₹{price.toLocaleString()}
+                        </span>
+
+                        {mrp > price && (
+                          <span className="text-sm line-through text-gray-400">
+                            ₹{mrp.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="mt-1 text-xs font-medium text-gray-600">
+                        Item total: Rs.{lineTotal.toLocaleString()} ({quantity}{" "}
+                        x Rs.{price.toLocaleString()})
+                      </p>
+
+                      {/* ACTIONS */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
+                        {/* QTY */}
+                        <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+                          <button
+                            onClick={() => decreaseQty(item)}
+                            className="w-9 h-9 flex items-center justify-center hover:bg-gray-100"
+                          >
+                            <Minus size={14} />
+                          </button>
+
+                          <span className="w-10 text-center text-sm font-medium">
+                            {quantity}
+                          </span>
+
+                          <button
+                            onClick={() => increaseQty(item)}
+                            className="w-9 h-9 flex items-center justify-center hover:bg-gray-100"
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </div>
+
+                        {/* BUTTONS */}
+                        <div className="flex items-center gap-2">
+                          <button className="h-9 px-4 rounded-lg border border-gray-200 text-sm font-medium hover:bg-gray-50 transition">
+                            Save
+                          </button>
+
+                          <button
+                            onClick={() => removeItem(item)}
+                            className="h-9 px-4 rounded-lg bg-red-50 text-red-600 text-sm font-medium hover:bg-red-100 transition flex items-center gap-2"
+                          >
+                            <Trash2 size={14} />
+                            Remove
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          ))}
+              );
+            })
+          )}
 
           {/* RECOMMENDED */}
           <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
@@ -438,9 +458,7 @@ export default function CartPage() {
             <div className="flex items-center gap-2 mb-4">
               <Tag size={18} className="text-orange-500" />
 
-              <h2 className="font-semibold text-gray-900">
-                Apply Coupon
-              </h2>
+              <h2 className="font-semibold text-gray-900">Apply Coupon</h2>
             </div>
 
             <div className="flex gap-2">
@@ -471,9 +489,7 @@ export default function CartPage() {
               <div className="flex justify-between text-sm text-gray-600">
                 <span>Shipping</span>
 
-                <span className="text-green-600 font-medium">
-                  FREE
-                </span>
+                <span className="text-green-600 font-medium">FREE</span>
               </div>
 
               <div className="flex justify-between text-sm text-gray-600">
@@ -488,9 +504,7 @@ export default function CartPage() {
                     Free Shipping
                   </span>
 
-                  <span className="text-green-700 font-medium">
-                    80%
-                  </span>
+                  <span className="text-green-700 font-medium">80%</span>
                 </div>
 
                 <div className="w-full h-2 bg-green-100 rounded-full overflow-hidden">
@@ -504,9 +518,7 @@ export default function CartPage() {
 
               {/* TOTAL */}
               <div className="border-t pt-4 flex justify-between items-center">
-                <span className="text-lg font-bold text-gray-900">
-                  Total
-                </span>
+                <span className="text-lg font-bold text-gray-900">Total</span>
 
                 <span className="text-2xl font-bold text-gray-900">
                   ₹{total.toLocaleString()}
@@ -549,9 +561,11 @@ export default function CartPage() {
           >
             <div className="bg-[#1e2a3a] px-6 py-5 flex items-start justify-between">
               <div>
-                <h2 className="text-white text-xl font-bold">Login Required</h2>
+                <h2 className="text-white text-xl font-bold">
+                  Login Required
+                </h2>
                 <p className="text-gray-300 text-sm mt-1">
-                  Checkout ke liye pehle login karo.
+                  Please log in before checkout.
                 </p>
               </div>
 

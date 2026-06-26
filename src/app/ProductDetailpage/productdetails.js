@@ -72,6 +72,14 @@ function getBulletPoints(item) {
     : [];
 }
 
+// Read the logged-in customer id for cart sync; guests continue with cid as null.
+function getLoggedInCid() {
+  if (typeof window === "undefined") return null;
+
+  const user = JSON.parse(localStorage.getItem("user") || "null");
+  return user?._id || user?.id || user?.cid || user?.user?._id || null;
+}
+
 export default function ProductDetailsPage({
   initialProduct = null,
   initialProductId = "",
@@ -336,7 +344,7 @@ export default function ProductDetailsPage({
 
     try {
       await createCartItem({
-        cid: null,
+        cid: getLoggedInCid(),
         pid: product.id,
         divid: deviceId,
         qty: safeQuantity,

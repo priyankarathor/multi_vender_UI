@@ -118,9 +118,9 @@ export default function DealsOfferBanner() {
               </div>
 
               <p className="mt-4 max-w-[520px] text-[15px] leading-relaxed text-gray-500">
-                Latest {activeBanner.categoryName} collection par limited-time
-                offer. Best deals explore karein aur apni cart me favourite
-                products add karein.
+                Limited-time offer on the latest {activeBanner.categoryName}
+                collection. Explore the best deals and add your favourite
+                products to the cart.
               </p>
 
               <div className="mt-5 flex flex-wrap items-center gap-4">

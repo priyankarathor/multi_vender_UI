@@ -1,23 +1,14 @@
 import { api } from "../baseurl/baseurl";
 
-const DEVICE_ID_KEY = "cartDeviceId";
-
-function createDeviceId() {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return `DIV-${crypto.randomUUID()}`;
-  }
-
-  return `DIV-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
 export function getCartDeviceId() {
   if (typeof window === "undefined") return "";
 
-  const savedDeviceId = localStorage.getItem(DEVICE_ID_KEY);
-  if (savedDeviceId) return savedDeviceId;
+  const deviceId = localStorage.getItem("deviceId") || crypto.randomUUID();
 
-  const deviceId = createDeviceId();
-  localStorage.setItem(DEVICE_ID_KEY, deviceId);
+  localStorage.setItem("deviceId", deviceId);
+
+  console.log(deviceId);
+
   return deviceId;
 }
 
@@ -37,4 +28,14 @@ export function createCartItem({
     variantId,
     offerDiscount,
   });
+}
+
+export function getCartItems({ cid = null } = {}) {
+  const divid = getCartDeviceId();
+
+  if (cid) {
+    return api.get(`/cart/customer/${cid}`);
+  }
+
+  return api.get(`/cart/device/${divid}`);
 }
