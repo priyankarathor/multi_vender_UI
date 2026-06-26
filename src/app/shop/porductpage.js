@@ -378,11 +378,15 @@ export default function ShopPage() {
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
-    setCurrentPage(1);
-    setFilters((prev) => ({
-      ...prev,
-      category: categoryFromUrl,
-    }));
+    const timer = window.setTimeout(() => {
+      setCurrentPage(1);
+      setFilters((prev) => ({
+        ...prev,
+        category: categoryFromUrl,
+      }));
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [categoryFromUrl]);
 
   useEffect(() => {
@@ -400,7 +404,6 @@ export default function ShopPage() {
         }
       } catch (error) {
         if (!active) return;
-        console.error("Failed to load products", error);
         setProductsError("Live products could not load. Showing saved products.");
       } finally {
         if (active) setProductsLoading(false);
@@ -445,7 +448,7 @@ export default function ShopPage() {
         setCategoryNamesById(namesById);
         setCategories(["All", ...new Set(apiCategories)]);
       } catch (error) {
-        console.error("Failed to load categories", error);
+        setCategories(["All"]);
       }
     };
 
@@ -687,11 +690,17 @@ export default function ShopPage() {
 
                   {/* IMAGE */}
                   <div className="relative aspect-square overflow-hidden">
-                    <img
-                      src={p.image}
-                      alt={p.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition"
-                    />
+                    {p.image ? (
+                      <img
+                        src={p.image}
+                        alt={p.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-gray-100 text-xs text-gray-400">
+                        No image available
+                      </div>
+                    )}
 
                     <span className="absolute top-2 left-2 text-[10px] px-2 py-1 bg-black text-white rounded-full">
                       {getCategoryName(p.category)}

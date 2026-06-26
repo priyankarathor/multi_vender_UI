@@ -5,6 +5,7 @@ import Footer from "./component/footer";
 
 
 export const metadata = {
+  metadataBase: new URL("https://www.yourdomain.com"), // apna actual Vercel/live domain daalo
   title: "Amazon clone",
   description: "Premium E-commerce Website",
 };

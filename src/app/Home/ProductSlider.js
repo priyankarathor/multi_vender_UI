@@ -50,7 +50,7 @@ const products = [
     oldPrice: "₹1,499",
     rating: 4.6,
     image:
-      "https://images.unsplash.com/photo-1517336714739-489689fd1ca8?q=80&w=1200&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?q=80&w=1200&auto=format&fit=crop",
   },
   {
     id: 5,
@@ -130,7 +130,7 @@ const products = [
     oldPrice: "₹1,499",
     rating: 4.6,
     image:
-      "https://images.unsplash.com/photo-1517336714739-489689fd1ca8?q=80&w=1200&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?q=80&w=1200&auto=format&fit=crop",
   },
   {
     id: 13,
@@ -275,6 +275,7 @@ export default function ProductSlider() {
                     src={product.image}
                     alt={product.title}
                     fill
+                    sizes="(max-width: 639px) 280px, (max-width: 767px) 300px, 320px"
                     priority
                     className="object-cover group-hover:scale-110 transition-transform duration-700"
                   />

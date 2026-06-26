@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -12,7 +13,13 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-const slides = [
+import {
+  fallbackBanner,
+  fetchBanners,
+  getBannersForCategory,
+} from "../apis/banners/banners";
+
+const fallbackSlides = [
   {
     id: 1,
     title: "Next Gen Shopping Experience",
@@ -54,16 +61,65 @@ const slides = [
   },
 ];
 
+function getOfferText(discountPercentage) {
+  return discountPercentage > 0 ? `${discountPercentage}% OFF` : "Hot Deal";
+}
+
+function createSlidesFromBanners(banners) {
+  return banners.map((banner) => ({
+    id: banner.id,
+    title: banner.title,
+    highlight: banner.categoryName,
+    description: `Latest ${banner.categoryName} collection par special offer available hai.`,
+    image: banner.image,
+    badge: banner.categoryName,
+    offer: getOfferText(banner.discountPercentage),
+    product: banner.title,
+    price: getOfferText(banner.discountPercentage),
+  }));
+}
+
 export default function HeroSection() {
+  const [heroSlides, setHeroSlides] = useState(() =>
+    createSlidesFromBanners([fallbackBanner])
+  );
   const [current, setCurrent] = useState(0);
+  const slides = heroSlides.length > 0 ? heroSlides : fallbackSlides;
 
   const nextSlide = () => setCurrent((prev) => (prev + 1) % slides.length);
   const prevSlide = () => setCurrent((prev) => (prev - 1 + slides.length) % slides.length);
 
   useEffect(() => {
-    const interval = setInterval(nextSlide, 5000);
-    return () => clearInterval(interval);
+    let isMounted = true;
+
+    fetchBanners()
+      .then((banners) => {
+        if (!isMounted) return;
+        setHeroSlides(
+          createSlidesFromBanners(
+            getBannersForCategory(banners, fallbackBanner.categoryName)
+          )
+        );
+        setCurrent(0);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setHeroSlides(createSlidesFromBanners([fallbackBanner]));
+        setCurrent(0);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrent((prev) => (prev + 1) % slides.length);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [slides.length]);
 
   return (
     <section className="relative overflow-hidden bg-[#eaeded]">
@@ -74,7 +130,7 @@ export default function HeroSection() {
       {/* GRID EFFECT */}
       <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(to_right,#000_1px,transparent_1px),linear-gradient(to_bottom,#000_1px,transparent_1px)] bg-[size:80px_80px]" />
 
-      <div className="relative w-full max-w-[1550px] mx-auto px-3 sm:px-4 lg:px-6 py-3 sm:py-5">
+      <div className="relative w-full max-w-[1550px] mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-3">
 
         {/* HERO WRAPPER */}
         <div className="relative overflow-hidden rounded-2xl sm:rounded-[28px] lg:rounded-[34px] bg-white border border-black/5 shadow-[0_15px_60px_rgba(0,0,0,0.08)]">
@@ -95,10 +151,12 @@ export default function HeroSection() {
                 <div className="flex flex-col lg:hidden">
 
                   {/* IMAGE TOP (mobile) */}
-                  <div className="relative h-[220px] sm:h-[280px] overflow-hidden">
-                    <img
+                  <div className="relative h-[190px] sm:h-[240px] overflow-hidden">
+                    <Image
                       src={slide.image}
                       alt={slide.product}
+                      fill
+                      sizes="100vw"
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
@@ -117,10 +175,10 @@ export default function HeroSection() {
                   </div>
 
                   {/* CONTENT (mobile) */}
-                  <div className="px-4 sm:px-6 pt-5 pb-4">
+                  <div className="px-4 sm:px-6 pt-4 pb-3">
 
                     {/* HEADING */}
-                    <h1 className="text-[30px] sm:text-[38px] leading-[0.95] font-extrabold tracking-tight text-black">
+                    <h1 className="text-[26px] sm:text-[32px] leading-[0.95] font-extrabold tracking-tight text-black">
                       {slide.title.split(" ")[0]}{" "}
                       <span className="text-[#ff9900]">{slide.highlight}</span>
                       <br />
@@ -128,12 +186,12 @@ export default function HeroSection() {
                     </h1>
 
                     {/* DESCRIPTION */}
-                    <p className="mt-3 text-[13px] sm:text-[14px] leading-6 text-gray-500 max-w-[520px]">
+                    <p className="mt-2 text-[12px] sm:text-[13px] leading-5 text-gray-500 max-w-[520px]">
                       {slide.description}
                     </p>
 
                     {/* BUTTONS */}
-                    <div className="flex gap-3 mt-5">
+                    <div className="flex gap-3 mt-4">
                       <Link
                         href="/shop"
                         className="h-[46px] px-5 rounded-xl bg-black text-white flex items-center gap-2 text-sm font-semibold hover:bg-[#1a1a1a] transition-all duration-300 shadow-lg"
@@ -146,7 +204,7 @@ export default function HeroSection() {
                     </div>
 
                     {/* PRODUCT CARD (mobile) */}
-                    <div className="mt-4 bg-[#fafafa] border border-black/5 rounded-2xl p-4 flex items-center justify-between gap-3">
+                    <div className="mt-3 bg-[#fafafa] border border-black/5 rounded-2xl p-3 flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-[9px] uppercase tracking-[0.2em] font-bold text-gray-400">Featured</p>
                         <h3 className="mt-1 text-[16px] font-semibold text-black truncate">{slide.product}</h3>
@@ -180,10 +238,10 @@ export default function HeroSection() {
                 </div>
 
                 {/* DESKTOP LAYOUT */}
-                <div className="hidden lg:grid lg:grid-cols-2 h-[620px]">
+                <div className="hidden lg:grid lg:grid-cols-2 h-[470px]">
 
                   {/* LEFT CONTENT */}
-                  <div className="flex items-center px-10 xl:px-14 py-12">
+                  <div className="flex items-center px-8 xl:px-12 py-8">
                     <div className="w-full">
 
                       {/* TOP BADGE */}
@@ -193,7 +251,7 @@ export default function HeroSection() {
                       </div>
 
                       {/* HEADING */}
-                      <h1 className="mt-6 text-[42px] xl:text-[56px] leading-[0.95] font-extrabold tracking-tight text-black max-w-[620px]">
+                      <h1 className="mt-4 text-[36px] xl:text-[44px] leading-[0.95] font-extrabold tracking-tight text-black max-w-[620px]">
                         {slide.title.split(" ")[0]}{" "}
                         <span className="text-[#ff9900]">{slide.highlight}</span>
                         <br />
@@ -201,12 +259,12 @@ export default function HeroSection() {
                       </h1>
 
                       {/* DESCRIPTION */}
-                      <p className="mt-5 text-[15px] leading-7 text-gray-600 max-w-[540px]">
+                      <p className="mt-4 text-[14px] leading-6 text-gray-600 max-w-[540px]">
                         {slide.description}
                       </p>
 
                       {/* BUTTONS */}
-                      <div className="flex flex-wrap gap-4 mt-8">
+                      <div className="flex flex-wrap gap-4 mt-6">
                         <Link
                           href="/shop"
                           className="h-[54px] px-7 rounded-2xl bg-black text-white flex items-center gap-3 text-sm font-semibold hover:bg-[#1a1a1a] transition-all duration-300 shadow-xl hover:scale-[1.02]"
@@ -219,13 +277,13 @@ export default function HeroSection() {
                       </div>
 
                       {/* FEATURES */}
-                      <div className="grid grid-cols-3 gap-3 mt-10">
+                      <div className="grid grid-cols-3 gap-3 mt-6">
                         {[
                           { icon: <Truck size={18} />, title: "Fast Delivery", sub: "Across India" },
                           { icon: <ShieldCheck size={18} />, title: "Secure Payments", sub: "100% Protected" },
                           { icon: <ShoppingBag size={18} />, title: "Premium Brands", sub: "Top Collections" },
                         ].map((item, i) => (
-                          <div key={i} className="flex items-center gap-3 bg-[#fafafa] border border-black/5 rounded-2xl p-4">
+                          <div key={i} className="flex items-center gap-3 bg-[#fafafa] border border-black/5 rounded-2xl p-3">
                             <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center shrink-0">{item.icon}</div>
                             <div>
                               <p className="text-[13px] font-bold text-black">{item.title}</p>
@@ -239,9 +297,11 @@ export default function HeroSection() {
 
                   {/* RIGHT SIDE */}
                   <div className="relative h-full overflow-hidden">
-                    <img
+                    <Image
                       src={slide.image}
                       alt={slide.product}
+                      fill
+                      sizes="50vw"
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-r from-black/5 via-transparent to-black/25" />
@@ -253,19 +313,19 @@ export default function HeroSection() {
                     </div>
 
                     {/* PRODUCT CARD */}
-                    <div className="absolute bottom-6 left-6 right-6 bg-white/90 backdrop-blur-2xl rounded-[28px] p-5 border border-white/40 shadow-[0_10px_40px_rgba(0,0,0,0.18)]">
+                    <div className="absolute bottom-5 left-5 right-5 bg-white/90 backdrop-blur-2xl rounded-[24px] p-4 border border-white/40 shadow-[0_10px_40px_rgba(0,0,0,0.18)]">
                       <div className="flex items-end justify-between gap-4">
                         <div className="min-w-0 flex-1">
                           <p className="text-[10px] uppercase tracking-[0.25em] font-bold text-gray-500">Featured Product</p>
-                          <h3 className="mt-2 text-[22px] leading-[1.1] font-semibold text-black truncate">{slide.product}</h3>
-                          <p className="mt-2 text-[12px] text-gray-500 line-clamp-1">Premium quality with elegant modern design.</p>
+                          <h3 className="mt-1 text-[19px] leading-[1.1] font-semibold text-black truncate">{slide.product}</h3>
+                          <p className="mt-1 text-[12px] text-gray-500 line-clamp-1">Premium quality with elegant modern design.</p>
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="text-[10px] text-gray-400 uppercase">Starting From</p>
-                          <h4 className="mt-1 text-[28px] leading-none font-extrabold text-black">{slide.price}</h4>
+                          <h4 className="mt-1 text-[24px] leading-none font-extrabold text-black">{slide.price}</h4>
                         </div>
                       </div>
-                      <button className="mt-5 w-full h-[50px] rounded-2xl bg-black text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-[#1a1a1a] transition-all duration-300 hover:scale-[1.01]">
+                      <button className="mt-3 w-full h-[44px] rounded-2xl bg-black text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-[#1a1a1a] transition-all duration-300 hover:scale-[1.01]">
                         Buy Now <ArrowRight size={16} />
                       </button>
                     </div>

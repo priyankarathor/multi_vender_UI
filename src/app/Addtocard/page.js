@@ -65,7 +65,7 @@ export default function CartPage() {
       id: 4,
       title: "Apple MacBook Air M3",
       image:
-        "https://images.unsplash.com/photo-1517336714739-489689fd1ca8?w=1000",
+        "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1000",
       price: "₹1,09,999",
       oldPrice: "₹1,24,999",
     },

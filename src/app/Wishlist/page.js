@@ -111,11 +111,17 @@ export default function WishlistPage() {
               >
                 <Link href={`/ProductDetailpage/${item.id}`} className="block">
                   <div className="relative aspect-square bg-gray-100 overflow-hidden">
-                    <img
-                      src={item.image}
-                      alt={item.name}
-                      className="w-full h-full object-cover"
-                    />
+                    {item.image ? (
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-xs text-gray-400">
+                        No image available
+                      </div>
+                    )}
                     <span className="absolute top-2 left-2 text-[10px] px-2 py-1 bg-black text-white rounded-full">
                       {getCategoryName(item)}
                     </span>

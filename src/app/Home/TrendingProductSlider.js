@@ -111,6 +111,7 @@ export default function TrendingProductsSection() {
                   src={product.image}
                   alt={product.title}
                   fill
+                  sizes="(max-width: 639px) 100vw, (max-width: 1279px) 50vw, 25vw"
                   className="object-cover group-hover:scale-110 transition-transform duration-700"
                 />
 

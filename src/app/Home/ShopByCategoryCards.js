@@ -117,6 +117,7 @@ export default function ShopByCategory() {
                   src={item.image}
                   alt={item.title}
                   fill
+                  sizes="(max-width: 767px) 100vw, (max-width: 1279px) 50vw, 25vw"
                   className="object-cover group-hover:scale-105 transition-all duration-700"
                 />
               </div>
