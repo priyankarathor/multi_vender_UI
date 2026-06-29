@@ -674,7 +674,7 @@ export default function ShopPage() {
           <ProductGridSkeleton count={8} />
         ) : (
           <div
-            className={`p-4 grid gap-5 ${
+            className={`grid auto-rows-fr gap-5 p-4 ${
               view === "grid"
                 ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
                 : "grid-cols-2 md:grid-cols-3"
@@ -685,8 +685,9 @@ export default function ShopPage() {
                 key={p.id}
                 href={`/ProductDetailpage/${p.id}`}
                 onClick={() => rememberProduct(p)}
+                className="h-full"
               >
-                <div className="group bg-white rounded-2xl overflow-hidden border hover:shadow-xl transition duration-300">
+                <div className="group flex h-full min-h-[415px] flex-col overflow-hidden rounded-2xl border bg-white transition duration-300 hover:shadow-xl">
 
                   {/* IMAGE */}
                   <div className="relative aspect-square overflow-hidden">
@@ -728,8 +729,8 @@ export default function ShopPage() {
                   </div>
 
                   {/* CONTENT */}
-                  <div className="p-3">
-                    <h3 className="text-sm font-semibold line-clamp-2">
+                  <div className="flex flex-1 flex-col p-3">
+                    <h3 className="min-h-[40px] text-sm font-semibold leading-5 line-clamp-2">
                       {p.name}
                     </h3>
 
@@ -758,7 +759,23 @@ export default function ShopPage() {
                       )}
                     </div>
 
-                    <button className="mt-3 w-full bg-black text-white py-2 rounded-xl text-xs flex items-center justify-center gap-2 hover:bg-zinc-800">
+                    <p
+                      className={`mt-1 text-xs font-medium ${
+                        p.stock == null
+                          ? "text-zinc-500"
+                          : p.stock > 0
+                            ? "text-green-700"
+                            : "text-red-600"
+                      }`}
+                    >
+                      {p.stock == null
+                        ? "Stock not listed"
+                        : p.stock > 0
+                          ? `Stock: ${p.stock}`
+                          : "Out of stock"}
+                    </p>
+
+                    <button className="mt-auto flex w-full items-center justify-center gap-2 rounded-xl bg-black py-2 text-xs text-white hover:bg-zinc-800">
                       <Eye size={14} />
                       View
                     </button>

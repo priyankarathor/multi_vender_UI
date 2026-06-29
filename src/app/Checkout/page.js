@@ -7,31 +7,68 @@ import AddressModal from "../component/AddressModal";
 import CartItems from "../component/CartItems";
 import OrderSummary from "../component/OrderSummary";
 
+function getCheckoutItemPrice(item) {
+  return Number(
+    item?.price ??
+      item?.variantId?.offer?.salePrice ??
+      item?.variantId?.offer?.sellingPrice ??
+      0
+  );
+}
+
+function getCheckoutItemMrp(item) {
+  return Number(item?.mrp ?? item?.variantId?.offer?.mrp ?? 0);
+}
+
+function normalizeCheckoutItem(item) {
+  const qty = item?.qty || item?.quantity || 1;
+  const price = getCheckoutItemPrice(item);
+  const mrp = getCheckoutItemMrp(item);
+
+  return {
+    ...item,
+    id: item?._id || item?.id || item?.cartId,
+    name:
+      item?.name ||
+      item?.title ||
+      item?.pid?.productName ||
+      item?.pid?.itemName ||
+      "Untitled Product",
+    image: item?.image || item?.variantId?.images?.[0] || item?.pid?.images?.[0],
+    qty,
+    quantity: qty,
+    price,
+    originalPrice: mrp > price ? mrp : item?.originalPrice,
+  };
+}
+
 export default function CheckoutPage() {
   const router = useRouter();
-  const [cartItems] = useState(() => {
-    if (typeof window === "undefined") return [];
-
-    const checkoutData = JSON.parse(
-      localStorage.getItem("checkoutData") || "{}"
-    );
-    const savedCartItems = JSON.parse(
-      localStorage.getItem("cartItems") || "[]"
-    );
-    const items = Array.isArray(checkoutData.items)
-      ? checkoutData.items
-      : savedCartItems;
-
-    return Array.isArray(items)
-      ? items.map((item) => ({
-          ...item,
-          name: item.name || item.title,
-          qty: item.qty || item.quantity || 1,
-        }))
-      : [];
-  });
+  const [cartItems, setCartItems] = useState([]);
+  const [cartReady, setCartReady] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [savedAddress, setSavedAddress] = useState(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const checkoutData = JSON.parse(
+        localStorage.getItem("checkoutData") || "{}"
+      );
+      const savedCartItems = JSON.parse(
+        localStorage.getItem("cartItems") || "[]"
+      );
+      const items = Array.isArray(checkoutData.items)
+        ? checkoutData.items
+        : savedCartItems;
+
+      setCartItems(
+        Array.isArray(items) ? items.map(normalizeCheckoutItem) : []
+      );
+      setCartReady(true);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const isLoggedIn =
@@ -55,6 +92,16 @@ export default function CheckoutPage() {
 
     console.log("Proceeding to payment with address:", savedAddress);
   };
+
+  if (!cartReady) {
+    return (
+      <div className="min-h-screen bg-gray-100 py-6 px-4">
+        <div className="max-w-6xl mx-auto rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500">
+          Loading checkout...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 py-6 px-4">

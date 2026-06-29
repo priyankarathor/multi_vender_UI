@@ -147,17 +147,27 @@ function getDetailAttributes(product) {
 export function normalizeVariant(variant) {
   if (!variant) return null;
 
+  const sellingPrice =
+    variant.sellingPrice ||
+    variant.offer?.sellingPrice ||
+    variant.offer?.salePrice ||
+    variant.salePrice ||
+    variant.price ||
+    0;
+  const mrp =
+    variant.mrp ||
+    variant.offer?.mrp ||
+    variant.offer?.price ||
+    variant.price ||
+    0;
+
   return {
     ...variant,
     color: variant.color || getVariantAttribute(variant, ["color", "colour"]),
     size: variant.size || getVariantAttribute(variant, ["size", "storage"]),
-    mrp: variant.mrp || variant.offer?.mrp || 0,
-    sellingPrice:
-      variant.sellingPrice ||
-      variant.offer?.sellingPrice ||
-      variant.offer?.salePrice ||
-      0,
-    salePrice: variant.salePrice || variant.offer?.salePrice || 0,
+    mrp,
+    sellingPrice,
+    salePrice: variant.salePrice || variant.offer?.salePrice || sellingPrice,
     stock: variant.stock ?? variant.inventory?.stock ?? variant.inventory?.quantity ?? 0,
     maxQuantity:
       variant.maxQuantity ||
@@ -174,9 +184,11 @@ export function getDefaultVariant(product) {
 
 export function getProductPrice(product, variant = getDefaultVariant(product)) {
   return Number(
-    variant?.sellingPrice ||
-      variant?.offer?.sellingPrice ||
+    variant?.salePrice ||
       variant?.offer?.salePrice ||
+      variant?.sellingPrice ||
+      variant?.offer?.sellingPrice ||
+      variant?.price ||
       product?.salePrice ||
       product?.price ||
       0
@@ -187,6 +199,8 @@ export function getProductMrp(product, variant = getDefaultVariant(product)) {
   return Number(
     variant?.mrp ||
       variant?.offer?.mrp ||
+      variant?.offer?.price ||
+      variant?.price ||
       product?.price ||
       product?.salePrice ||
       0
@@ -226,6 +240,12 @@ export function normalizeProduct(product) {
       product?.discount ||
       (mrp > price && price > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0),
     rating: product?.rating || 4.5,
+    stock:
+      variant?.stock ??
+      product?.stock ??
+      product?.inventory?.stock ??
+      product?.quantity ??
+      null,
     image: getProductImage(product, variant),
     defaultVariant: variant,
   };
@@ -240,7 +260,33 @@ export async function fetchProducts() {
   }
 
   const payload = await response.json();
-  return getProductsFromPayload(payload).map(normalizeProduct).filter((p) => p.id);
+  const products = getProductsFromPayload(payload);
+  const enrichedProducts = await Promise.all(
+    products.map(async (product) => {
+      if (Array.isArray(product?.variants) && product.variants.length > 0) {
+        return product;
+      }
+
+      const productId = product?._id || product?.id;
+      if (!productId) return product;
+
+      try {
+        const detailResponse = await fetch(`${PRODUCT_API_URL}/${productId}`, {
+          cache: "no-store",
+        });
+        if (!detailResponse.ok) return product;
+
+        const detailPayload = await detailResponse.json();
+        const detailedProduct = getProductFromPayload(detailPayload);
+
+        return detailedProduct || product;
+      } catch {
+        return product;
+      }
+    })
+  );
+
+  return enrichedProducts.map(normalizeProduct).filter((p) => p.id);
 }
 
 export async function fetchProductById(id) {

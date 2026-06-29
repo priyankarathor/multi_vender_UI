@@ -21,6 +21,7 @@ import {
 export default function CartPage() {
   const router = useRouter();
   const [cartItems, setCartItems] = useState([]);
+  const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
@@ -34,7 +35,9 @@ export default function CartPage() {
       try {
         const cid = typeof window !== "undefined" ? localStorage.getItem("cid") : null;
         const res = await getCartItems({ cid });
-        setCartItems(res.data?.data || []);
+        const items = res.data?.data || [];
+        setCartItems(items);
+        setSelectedItemIds(items.map((item) => item._id).filter(Boolean));
       } catch (error) {
         console.log(error);
       } finally {
@@ -120,6 +123,15 @@ export default function CartPage() {
 
   const removeItem = (item) => {
     setCartItems((prev) => prev.filter((i) => i._id !== item._id));
+    setSelectedItemIds((prev) => prev.filter((id) => id !== item._id));
+  };
+
+  const toggleItemSelection = (itemId) => {
+    setSelectedItemIds((prev) =>
+      prev.includes(itemId)
+        ? prev.filter((id) => id !== itemId)
+        : [...prev, itemId]
+    );
   };
 
   const addRecommendedToCart = (product) => {
@@ -168,13 +180,18 @@ export default function CartPage() {
       return;
     }
 
+    if (selectedCartItems.length === 0) {
+      alert("Please select at least one product before checkout.");
+      return;
+    }
+
     if (!isUserLoggedIn()) {
       setLoginModalOpen(true);
       return;
     }
 
     const checkoutData = {
-      items: cartItems,
+      items: selectedCartItems,
       subtotal,
       tax,
       total,
@@ -185,7 +202,11 @@ export default function CartPage() {
     router.push("/Checkout");
   };
 
-  const subtotal = cartItems.reduce(
+  const selectedCartItems = cartItems.filter((item) =>
+    selectedItemIds.includes(item._id)
+  );
+
+  const subtotal = selectedCartItems.reduce(
     (acc, item) => acc + getPrice(item) * getQty(item),
     0
   );
@@ -215,7 +236,7 @@ export default function CartPage() {
                 </h1>
 
                 <p className="text-sm text-gray-500 mt-1">
-                  {cartItems.length} Items
+                  {selectedCartItems.length} of {cartItems.length} Items selected
                 </p>
               </div>
 
@@ -247,13 +268,26 @@ export default function CartPage() {
               const mrp = getMrp(item);
               const quantity = getQty(item);
               const lineTotal = price * quantity;
+              const isSelected = selectedItemIds.includes(item._id);
 
               return (
                 <div
                   key={item._id}
-                  className="bg-white border border-gray-200 rounded-2xl p-4 hover:shadow-md transition"
+                  className={`rounded-2xl border bg-white p-4 transition hover:shadow-md ${
+                    isSelected ? "border-gray-200" : "border-gray-200 opacity-70"
+                  }`}
                 >
                   <div className="flex gap-4">
+                    <label className="mt-10 flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleItemSelection(item._id)}
+                        aria-label={`Select ${title}`}
+                        className="h-5 w-5 cursor-pointer accent-black"
+                      />
+                    </label>
+
                     {/* IMAGE */}
                     <div className="w-28 h-28 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
                       <img
@@ -304,8 +338,9 @@ export default function CartPage() {
                       </div>
 
                       <p className="mt-1 text-xs font-medium text-gray-600">
-                        Item total: Rs.{lineTotal.toLocaleString()} ({quantity}{" "}
-                        x Rs.{price.toLocaleString()})
+                        {isSelected ? "Item total" : "Not included"}: Rs.
+                        {lineTotal.toLocaleString()} ({quantity} x Rs.
+                        {price.toLocaleString()})
                       </p>
 
                       {/* ACTIONS */}
@@ -479,6 +514,11 @@ export default function CartPage() {
             <h2 className="text-xl font-bold text-gray-900 mb-5">
               Order Summary
             </h2>
+
+            <p className="mb-4 text-xs font-medium text-gray-500">
+              {selectedCartItems.length} selected item
+              {selectedCartItems.length === 1 ? "" : "s"} included in total
+            </p>
 
             <div className="space-y-4">
               <div className="flex justify-between text-sm text-gray-600">

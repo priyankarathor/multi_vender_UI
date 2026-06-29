@@ -2,7 +2,8 @@ import { ShieldCheck, Truck } from "lucide-react";
 
 export default function OrderSummary({ items = [], onProceed }) {
   const subtotal = items.reduce(
-    (sum, item) => sum + item.price * (item.qty || item.quantity || 1),
+    (sum, item) =>
+      sum + (Number(item.price) || 0) * (item.qty || item.quantity || 1),
     0
   );
 
