@@ -8,6 +8,7 @@ import MobileFilters from "./MobileFilters";
 import ProductGrid from "./ProductGrid";
 import ShopHero from "./ShopHero";
 import SortBar from "./SortBar";
+import CategoryOfferStrip from "./CategoryOfferStrip";
 
 export default function ShopContent() {
   const searchParams = useSearchParams();

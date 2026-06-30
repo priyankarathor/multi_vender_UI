@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { loginUser } from "../apis/login/login";
+import { userLogin } from "../apis/userlogin/userlogin";
+import { userRegister } from "../apis/userregister/userregister";
 import { getCartItems } from "../apis/cart/cart";
 import {
   Heart,
@@ -23,11 +24,30 @@ export default function CartPage() {
   const [cartItems, setCartItems] = useState([]);
   const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // login modal state
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginForm, setLoginForm] = useState({
     email: "",
     password: "",
+  });
+
+  // register modal state (shown when login fails because user not registered)
+  const [registerModalOpen, setRegisterModalOpen] = useState(false);
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [registerForm, setRegisterForm] = useState({
+    name: "",
+    email: "",
+    number: "",
+    password: "",
+    status: "active",
+    role: "customer",
+    companyname: "",
+    category: "",
+    city: "",
+    state: "",
+    pincode: "",
   });
 
   useEffect(() => {
@@ -146,6 +166,8 @@ export default function CartPage() {
     );
   };
 
+  // ---------------- LOGIN HANDLERS ----------------
+
   const handleLoginChange = (e) => {
     setLoginForm({
       ...loginForm,
@@ -153,12 +175,25 @@ export default function CartPage() {
     });
   };
 
+  // checks the backend error message to figure out ki user db me hai hi nahi
+  // (i.e. register nahi hai), tabhi register modal open karna hai
+  const isNotRegisteredError = (message = "") => {
+    const msg = message.toLowerCase();
+    return (
+      msg.includes("not found") ||
+      msg.includes("not registered") ||
+      msg.includes("does not exist") ||
+      msg.includes("no user") ||
+      msg.includes("invalid email")
+    );
+  };
+
   const handleLocalLogin = async (e) => {
     e.preventDefault();
 
     try {
       setLoginLoading(true);
-      const res = await loginUser(loginForm);
+      const res = await userLogin(loginForm);
 
       localStorage.setItem("user", JSON.stringify(res.data));
       localStorage.setItem("checkoutUser", JSON.stringify(res.data));
@@ -168,11 +203,55 @@ export default function CartPage() {
       setLoginModalOpen(false);
       alert("Login successful. You can proceed to checkout now.");
     } catch (error) {
-      alert(error.response?.data?.message || "Login failed");
+      const message = error.response?.data?.message || "Login failed";
+
+      // agar user database me mila hi nahi, tho register karwa do
+      if (isNotRegisteredError(message)) {
+        setRegisterForm((prev) => ({
+          ...prev,
+          email: loginForm.email,
+          password: loginForm.password,
+        }));
+        setLoginModalOpen(false);
+        setRegisterModalOpen(true);
+      } else {
+        alert(message);
+      }
     } finally {
       setLoginLoading(false);
     }
   };
+
+  // ---------------- REGISTER HANDLERS ----------------
+
+  const handleRegisterChange = (e) => {
+    setRegisterForm({
+      ...registerForm,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleLocalRegister = async (e) => {
+    e.preventDefault();
+
+    try {
+      setRegisterLoading(true);
+      const res = await userRegister(registerForm);
+
+      localStorage.setItem("user", JSON.stringify(res.data));
+      localStorage.setItem("checkoutUser", JSON.stringify(res.data));
+      if (res.data?.token) localStorage.setItem("userToken", res.data.token);
+
+      setRegisterModalOpen(false);
+      alert("Registration successful. You can proceed to checkout now.");
+    } catch (error) {
+      alert(error.response?.data?.message || "Registration failed");
+    } finally {
+      setRegisterLoading(false);
+    }
+  };
+
+  // ---------------- CHECKOUT ----------------
 
   const handleCheckout = () => {
     if (cartItems.length === 0) {
@@ -590,6 +669,7 @@ export default function CartPage() {
         </div>
       </div>
 
+      {/* LOGIN MODAL */}
       {loginModalOpen && (
         <div
           className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4"
@@ -651,6 +731,25 @@ export default function CartPage() {
                 </div>
               </div>
 
+              <p className="text-xs text-gray-500 mt-4">
+                New here?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRegisterForm((prev) => ({
+                      ...prev,
+                      email: loginForm.email,
+                      password: loginForm.password,
+                    }));
+                    setLoginModalOpen(false);
+                    setRegisterModalOpen(true);
+                  }}
+                  className="text-[#F5A623] font-semibold hover:underline"
+                >
+                  Create an account
+                </button>
+              </p>
+
               <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-100">
                 <button
                   type="button"
@@ -662,10 +761,189 @@ export default function CartPage() {
 
                 <button
                   type="submit"
-                  className="px-5 h-11 rounded-lg bg-[#F5A623] hover:bg-[#e09610] text-white text-sm font-semibold flex items-center gap-2 transition"
+                  disabled={loginLoading}
+                  className="px-5 h-11 rounded-lg bg-[#F5A623] hover:bg-[#e09610] text-white text-sm font-semibold flex items-center gap-2 transition disabled:opacity-60"
                 >
                   <User size={16} />
                   {loginLoading ? "Logging in..." : "Login"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* REGISTER MODAL - opens automatically when login fails because user is not registered */}
+      {registerModalOpen && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setRegisterModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-[480px] bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-[#1e2a3a] px-6 py-5 flex items-start justify-between">
+              <div>
+                <h2 className="text-white text-xl font-bold">
+                  Create Account
+                </h2>
+                <p className="text-gray-300 text-sm mt-1">
+                  Looks like you don't have an account yet. Please register to continue.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setRegisterModalOpen(false)}
+                className="text-gray-300 hover:text-white transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleLocalRegister} className="px-6 py-6">
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={registerForm.name}
+                    onChange={handleRegisterChange}
+                    placeholder="Enter full name"
+                    className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={registerForm.email}
+                    onChange={handleRegisterChange}
+                    placeholder="Enter email"
+                    className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Mobile Number
+                  </label>
+                  <input
+                    type="text"
+                    name="number"
+                    value={registerForm.number}
+                    onChange={handleRegisterChange}
+                    placeholder="Enter mobile number"
+                    className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    name="password"
+                    value={registerForm.password}
+                    onChange={handleRegisterChange}
+                    placeholder="Enter password"
+                    className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      City
+                    </label>
+                    <input
+                      type="text"
+                      name="city"
+                      value={registerForm.city}
+                      onChange={handleRegisterChange}
+                      placeholder="City"
+                      className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      State
+                    </label>
+                    <input
+                      type="text"
+                      name="state"
+                      value={registerForm.state}
+                      onChange={handleRegisterChange}
+                      placeholder="State"
+                      className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Pincode
+                  </label>
+                  <input
+                    type="text"
+                    name="pincode"
+                    value={registerForm.pincode}
+                    onChange={handleRegisterChange}
+                    placeholder="Pincode"
+                    className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
+                  />
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-500 mt-4">
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginForm((prev) => ({
+                      ...prev,
+                      email: registerForm.email,
+                      password: registerForm.password,
+                    }));
+                    setRegisterModalOpen(false);
+                    setLoginModalOpen(true);
+                  }}
+                  className="text-[#F5A623] font-semibold hover:underline"
+                >
+                  Login instead
+                </button>
+              </p>
+
+              <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setRegisterModalOpen(false)}
+                  className="px-5 h-11 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={registerLoading}
+                  className="px-5 h-11 rounded-lg bg-[#F5A623] hover:bg-[#e09610] text-white text-sm font-semibold flex items-center gap-2 transition disabled:opacity-60"
+                >
+                  <User size={16} />
+                  {registerLoading ? "Registering..." : "Register"}
                 </button>
               </div>
             </form>

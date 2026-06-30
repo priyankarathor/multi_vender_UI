@@ -18,6 +18,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { getCategories } from "../apis/category/category";
 import { fetchProducts } from "../apis/products/products";
 import { ProductGridSkeleton } from "../component/PageSkeleton";
+import FestiveOfferBanner from "./FestiveOfferBanner";
 
 /* ================= PRODUCTS (same as yours) ================= */
 const ALL_PRODUCTS = [
@@ -633,7 +634,7 @@ export default function ShopPage() {
 
       {/* ================= MAIN ================= */}
       <div className="flex-1">
-
+<FestiveOfferBanner />
         {/* TOP BAR */}
         <div className="sticky top-0 z-20 bg-white/80 backdrop-blur border-b px-4 py-3 flex justify-between items-center">
           <div>
@@ -857,6 +858,7 @@ export default function ShopPage() {
             </div>
           </div>
         )}
+      
       </div>
 
       {/* ================= MOBILE FILTER ================= */}
@@ -931,7 +933,9 @@ export default function ShopPage() {
             </motion.div>
           </>
         )}
+
       </AnimatePresence>
+
     </div>
   );
 }

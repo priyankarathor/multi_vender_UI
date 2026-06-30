@@ -24,6 +24,11 @@ import {
   isValidProductImageUrl,
 } from "../apis/products/products";
 import { createCartItem, getCartDeviceId } from "../apis/cart/cart";
+import {
+  createWishlistItem,
+  deleteWishlistItem,
+  getWishlistByDevice,
+} from "../apis/wishlist/wishlist"; // <-- ADDED
 import { ProductDetailSkeleton } from "../component/PageSkeleton";
 
 const fieldLabel = {
@@ -100,6 +105,7 @@ export default function ProductDetailsPage({
   const [addingToCart, setAddingToCart] = useState(false);
   const [wishlistItems, setWishlistItems] = useState([]);
   const [storageReady, setStorageReady] = useState(false);
+  const [togglingWishlist, setTogglingWishlist] = useState(false); // <-- ADDED
 
   useEffect(() => {
     let active = true;
@@ -183,18 +189,38 @@ export default function ProductDetailsPage({
       const savedCartItems = JSON.parse(
         localStorage.getItem("cartItems") || "[]"
       );
-      const savedWishlistItems = JSON.parse(
-        localStorage.getItem("wishlistItems") || "[]"
-      );
 
       setCartItems(Array.isArray(savedCartItems) ? savedCartItems : []);
-      setWishlistItems(
-        Array.isArray(savedWishlistItems) ? savedWishlistItems : []
-      );
       setStorageReady(true);
     }, 0);
 
     return () => window.clearTimeout(timer);
+  }, []);
+
+  // Wishlist ab backend se load hota hai (localStorage se nahi), taaki
+  // har item ka real backend _id pata rahe -- delete ke liye yahi _id chahiye.
+  useEffect(() => {
+    let active = true;
+
+    const loadWishlistFromBackend = async () => {
+      try {
+        const divid = getCartDeviceId();
+        if (!divid) return;
+
+        const res = await getWishlistByDevice(divid);
+        const items = Array.isArray(res?.data?.data) ? res.data.data : [];
+        if (active) setWishlistItems(items);
+      } catch (err) {
+        // backend "no wishlist found" pe 404 deta hai -- isko empty treat karo
+        if (active) setWishlistItems([]);
+      }
+    };
+
+    loadWishlistFromBackend();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -203,13 +229,6 @@ export default function ProductDetailsPage({
     localStorage.setItem("cartItems", JSON.stringify(cartItems));
     window.dispatchEvent(new Event("cartUpdated"));
   }, [cartItems, storageReady]);
-
-  useEffect(() => {
-    if (!storageReady) return;
-
-    localStorage.setItem("wishlistItems", JSON.stringify(wishlistItems));
-    window.dispatchEvent(new Event("wishlistUpdated"));
-  }, [wishlistItems, storageReady]);
 
   const price = getProductPrice(product, selectedVariant);
   const mrp = getProductMrp(product, selectedVariant);
@@ -255,7 +274,11 @@ export default function ProductDetailsPage({
       ? getBulletPoints(selectedVariant)
       : product?.bulletPoints || [];
   const liked = product
-    ? wishlistItems.some((item) => item.id === product.id)
+    ? wishlistItems.some((item) => {
+        const itemProductId =
+          item.pid && typeof item.pid === "object" ? item.pid._id : item.pid;
+        return itemProductId === product.id;
+      })
     : false;
 
   const chooseVariant = (matcher) => {
@@ -361,29 +384,50 @@ export default function ProductDetailsPage({
     }
   };
 
-  const handleToggleWishlist = () => {
-    if (!product) return;
+  // ----- FIXED: ab backend ke real _id ke saath kaam karta hai -----
+  const handleToggleWishlist = async () => {
+    if (!product || togglingWishlist) return;
 
-    setWishlistItems((prev) => {
-      const exists = prev.some((item) => item.id === product.id);
-
-      if (exists) {
-        return prev.filter((item) => item.id !== product.id);
-      }
-
-      return [
-        ...prev,
-        {
-          id: product.id,
-          name: product.name,
-          category: product.category,
-          categoryName: product.category,
-          price,
-          rating: product.rating,
-          image: activeImage,
-        },
-      ];
+    const existingItem = wishlistItems.find((item) => {
+      const itemProductId =
+        item.pid && typeof item.pid === "object" ? item.pid._id : item.pid;
+      return itemProductId === product.id;
     });
+    const deviceId = getCartDeviceId();
+
+    setTogglingWishlist(true);
+
+    try {
+      if (existingItem) {
+        // optimistic remove
+        setWishlistItems((prev) =>
+          prev.filter((item) => item._id !== existingItem._id)
+        );
+        await deleteWishlistItem(existingItem._id);
+      } else {
+        const res = await createWishlistItem({
+          cid: getLoggedInCid(),
+          pid: product.id,
+          divid: deviceId,
+          qty: 1,
+          variantId: selectedVariant?._id || null,
+          venderid: product.vendorId || product.venderid || null,
+          offerDiscount: discount || product.discount || 0,
+        });
+
+        const created = res?.data?.data;
+        if (created) {
+          setWishlistItems((prev) => [...prev, created]);
+        }
+      }
+    } catch (err) {
+      console.error(
+        "Wishlist API failed",
+        err.response?.data?.message || err.message
+      );
+    } finally {
+      setTogglingWishlist(false);
+    }
   };
 
   if (loading) {
@@ -744,14 +788,19 @@ export default function ProductDetailsPage({
                   </button>
                   <button
                     onClick={handleToggleWishlist}
-                    className={`flex h-10 w-full items-center justify-center gap-1.5 rounded-full border text-sm font-medium transition ${
+                    disabled={togglingWishlist}
+                    className={`flex h-10 w-full items-center justify-center gap-1.5 rounded-full border text-sm font-medium transition disabled:opacity-60 ${
                       liked
                         ? "border-[#E47911] bg-[#FFF8F0] text-[#E47911]"
                         : "border-gray-300 text-[#0F1111] hover:bg-gray-50"
                     }`}
                   >
                     <Heart size={14} fill={liked ? "currentColor" : "none"} />
-                    {liked ? "Added to Wish List" : "Add to Wish List"}
+                    {togglingWishlist
+                      ? "Please wait..."
+                      : liked
+                        ? "Added to Wish List"
+                        : "Add to Wish List"}
                   </button>
                 </div>
 

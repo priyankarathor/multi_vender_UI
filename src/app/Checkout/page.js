@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, MapPin, Plus } from "lucide-react";
-import AddressModal from "../component/AddressModal";
+import { ShieldCheck } from "lucide-react";
+import AddressForm from "./address";
 import CartItems from "../component/CartItems";
 import OrderSummary from "../component/OrderSummary";
+import { placeOrder } from "../apis/order/order";
 
 function getCheckoutItemPrice(item) {
   return Number(
@@ -42,12 +43,53 @@ function normalizeCheckoutItem(item) {
   };
 }
 
+function toOrderItem(item) {
+  return {
+    product_id: item?.pid?._id || "",
+    variant_id: item?.variantId?._id || "",
+    vendor_id: item?.pid?.vendorId || "",
+    product_name: item?.pid?.productName || item?.pid?.itemName || "Untitled Product",
+    quantity: item?.qty || item?.quantity || 1,
+    unit_price: Number(
+      item?.variantId?.offer?.salePrice ??
+        item?.variantId?.offer?.sellingPrice ??
+        0
+    ),
+  };
+}
+
+function isValidObjectId(val) {
+  return typeof val === "string" && /^[0-9a-fA-F]{24}$/.test(val);
+}
+
+function getLoggedInUserId(cartItems) {
+  let user = {};
+  try {
+    user = JSON.parse(localStorage.getItem("user") || "{}");
+  } catch (e) {
+    user = {};
+  }
+
+  const candidates = [
+    cartItems?.[0]?.cid,
+    user?._id,
+    user?.id,
+    user?.userId,
+    localStorage.getItem("cid"),
+    localStorage.getItem("userId"),
+  ];
+
+  return candidates.find(isValidObjectId) || "";
+}
+
+const steps = ["BAG", "ADDRESS", "PAYMENT"];
+
 export default function CheckoutPage() {
   const router = useRouter();
   const [cartItems, setCartItems] = useState([]);
   const [cartReady, setCartReady] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [savedAddress, setSavedAddress] = useState(null);
+  const [currentStep, setCurrentStep] = useState("BAG"); // BAG -> ADDRESS -> PAYMENT
+  const [placingOrder, setPlacingOrder] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -79,18 +121,69 @@ export default function CheckoutPage() {
     }
   }, [router]);
 
-  const handleSaveAddress = (address) => {
-    setSavedAddress(address);
-    console.log("Saved address:", address);
-  };
-
-  const handleProceed = () => {
-    if (!savedAddress) {
-      alert("Please add a delivery address first.");
+  const handleSaveAddress = async (address) => {
+    if (cartItems.length === 0) {
+      alert("Your cart is empty.");
       return;
     }
 
-    console.log("Proceeding to payment with address:", savedAddress);
+    const userId = getLoggedInUserId(cartItems);
+
+    if (!userId) {
+      alert("Could not find a valid user id. Please log in again.");
+      return;
+    }
+
+    let user = {};
+    try {
+      user = JSON.parse(localStorage.getItem("user") || "{}");
+    } catch (e) {
+      user = {};
+    }
+
+    const [firstName, ...rest] = (address.fullName || "").trim().split(" ");
+    const lastName = rest.join(" ");
+
+    const fullAddressText = [
+      address.houseNumber,
+      address.area,
+      address.locality,
+      address.city,
+      address.state,
+      address.pincode,
+      address.landmark,
+    ]
+      .filter(Boolean)
+      .join(", ");
+
+    const payload = {
+      user_id: userId,
+      payment_method: "COD",
+      billing_address: { address: fullAddressText },
+      shipping_address: { address: fullAddressText },
+      customer_details: {
+        first_name: firstName || "",
+        last_name: lastName || "",
+        phone: address.mobile,
+        email: user?.email || "",
+      },
+      items: cartItems.map(toOrderItem),
+    };
+
+    try {
+      setPlacingOrder(true);
+      await placeOrder(payload);
+
+      localStorage.removeItem("checkoutData");
+      localStorage.removeItem("cartItems");
+
+      alert("Order placed successfully!");
+      router.push("/");
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to place order. Please try again.");
+    } finally {
+      setPlacingOrder(false);
+    }
   };
 
   if (!cartReady) {
@@ -104,75 +197,69 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 py-6 px-4">
-      <div className="max-w-6xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-[70%_30%] gap-4 items-start">
-          <div>
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <h2 className="text-lg font-medium text-gray-900 pb-3 border-b border-gray-200 mb-3 flex items-center gap-2">
-                <MapPin className="h-5 w-5 text-[#FF9900]" />
-                Delivery address
-              </h2>
-
-              {savedAddress ? (
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-3">
-                  <p className="text-sm font-medium text-gray-900 mb-1 flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-[#FF9900]" />
-                    Delivery address saved
-                  </p>
-                  <p className="text-sm text-gray-700">
-                    {savedAddress.fullName}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    {savedAddress.flat}, {savedAddress.area}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    {savedAddress.city}, {savedAddress.state} -{" "}
-                    {savedAddress.pincode}
-                  </p>
-                  {savedAddress.landmark && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Near: {savedAddress.landmark}
-                    </p>
-                  )}
-                  <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="text-xs text-[#FF9900] hover:underline mt-2 block font-medium"
-                  >
-                    Change address
-                  </button>
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500 mb-4">
-                  Enter your address to see delivery options
-                </p>
-              )}
-
-              {!savedAddress && (
+    <div className="min-h-screen bg-gray-100">
+      {/* TOP STEPPER BAR */}
+      <div className="bg-white border-b border-gray-200 px-4 py-4">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            {steps.map((step, i) => (
+              <span key={step} className="flex items-center gap-4">
                 <button
-                  onClick={() => setIsModalOpen(true)}
-                  className="bg-[#FF9900] hover:bg-[#e68a00] text-black font-medium text-sm px-5 py-2.5 rounded-full transition-colors inline-flex items-center gap-2"
+                  onClick={() => {
+                    if (step === "BAG") setCurrentStep("BAG");
+                    if (step === "ADDRESS") setCurrentStep("ADDRESS");
+                  }}
+                  className={`text-xs font-bold tracking-widest ${
+                    currentStep === step
+                      ? "text-[#FF9900]"
+                      : "text-gray-400"
+                  }`}
                 >
-                  <Plus className="h-4 w-4" />
-                  Add a new delivery address
+                  {step}
                 </button>
-              )}
-            </div>
-
-            <CartItems items={cartItems} />
+                {i < steps.length - 1 && (
+                  <span className="text-gray-300">- - - - - -</span>
+                )}
+              </span>
+            ))}
           </div>
 
-          <div className="lg:sticky lg:top-44 self-start">
-            <OrderSummary items={cartItems} onProceed={handleProceed} />
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-green-600">
+            <ShieldCheck className="h-4 w-4" />
+            100% SECURE
           </div>
         </div>
       </div>
 
-      <AddressModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSave={handleSaveAddress}
-      />
+      <div className="max-w-6xl mx-auto px-4 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[70%_30%] gap-4 items-start">
+          <div>
+            {currentStep === "BAG" && (
+              <>
+                <CartItems items={cartItems} />
+
+                <button
+                  onClick={() => setCurrentStep("ADDRESS")}
+                  className="mt-4 w-full sm:w-auto px-8 h-12 rounded-md bg-[#FF9900] hover:bg-[#e68a00] text-black text-sm font-bold tracking-wide transition"
+                >
+                  PLACE ORDER
+                </button>
+              </>
+            )}
+
+            {currentStep === "ADDRESS" && (
+              <AddressForm onSave={handleSaveAddress} saving={placingOrder} />
+            )}
+          </div>
+
+          <div className="lg:sticky lg:top-44 self-start">
+            <OrderSummary
+              items={cartItems}
+              onProceed={() => setCurrentStep("ADDRESS")}
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
