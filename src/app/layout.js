@@ -1,8 +1,7 @@
 import "./globals.css";
+import { Suspense } from "react";
 import Navbar from "./component/navbar";
 import Footer from "./component/footer";
- 
-
 
 export const metadata = {
   metadataBase: new URL("https://www.yourdomain.com"), // Replace with the deployed production domain.
@@ -14,11 +13,13 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body suppressHydrationWarning>
-        <Navbar />
-        <main >
+        <Suspense fallback={null}>
+          <Navbar />
+        </Suspense>
+        <main>
           {children}
         </main>
-        <Footer/>
+        <Footer />
       </body>
     </html>
   );
