@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getCategories } from "../apis/category/category";
+import { getSubCategories } from "../apis/subcategory/subcategory";
 import { fetchProducts } from "../apis/products/products";
 import { ProductGridSkeleton } from "../component/PageSkeleton";
 import FestiveOfferBanner from "./FestiveOfferBanner";
@@ -352,16 +353,35 @@ const priceRanges = [
 
 const PRODUCTS_PER_PAGE = 20;
 
+const getApiList = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.categories)) return payload.categories;
+  if (Array.isArray(payload?.subcategories)) return payload.subcategories;
+  if (Array.isArray(payload?.data?.data)) return payload.data.data;
+  if (Array.isArray(payload?.data?.categories)) return payload.data.categories;
+  if (Array.isArray(payload?.data?.subcategories)) return payload.data.subcategories;
+  return [];
+};
+
+const getSubCategoryName = (subcategory) =>
+  subcategory?.name || subcategory?.subcategory || subcategory?.title || "";
+
 /* ================= PAGE ================= */
 export default function ShopPage() {
   const searchParams = useSearchParams();
   const categoryFromUrl = searchParams.get("category") || "All";
+  const subcategoryFromUrl = searchParams.get("subcategory") || "All";
+  const searchFromUrl = searchParams.get("search") || "";
 
   const [products, setProducts] = useState(ALL_PRODUCTS);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState("");
   const [categories, setCategories] = useState(["All"]);
   const [categoryNamesById, setCategoryNamesById] = useState({});
+  const [categoryIdsByName, setCategoryIdsByName] = useState({});
+  const [subCategoryNamesById, setSubCategoryNamesById] = useState({});
+  const [subCategories, setSubCategories] = useState([]);
   const [wishlistItems, setWishlistItems] = useState(() => {
     if (typeof window === "undefined") return [];
 
@@ -370,6 +390,8 @@ export default function ShopPage() {
   });
   const [filters, setFilters] = useState({
     category: "All",
+    subcategory: "All",
+    subcategoryId: "",
     price: "All",
     rating: 0,
   });
@@ -384,11 +406,13 @@ export default function ShopPage() {
       setFilters((prev) => ({
         ...prev,
         category: categoryFromUrl,
+        subcategory: subcategoryFromUrl,
+        subcategoryId: "",
       }));
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [categoryFromUrl]);
+  }, [categoryFromUrl, searchFromUrl, subcategoryFromUrl]);
 
   useEffect(() => {
     let active = true;
@@ -396,7 +420,11 @@ export default function ShopPage() {
     const loadProducts = async () => {
       try {
         setProductsLoading(true);
-        const apiProducts = await fetchProducts();
+        const apiProducts = await fetchProducts({
+          category: filters.category,
+          subcategory: filters.subcategory,
+          subcategoryId: filters.subcategoryId,
+        });
         if (!active) return;
 
         if (apiProducts.length > 0) {
@@ -416,7 +444,7 @@ export default function ShopPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [filters.category, filters.subcategory, filters.subcategoryId]);
 
   useEffect(() => {
     const loadCategories = async () => {
@@ -438,6 +466,19 @@ export default function ShopPage() {
           return map;
         }, {});
 
+        const idsByName = rawCategories.reduce((map, category) => {
+          if (typeof category === "string") return map;
+
+          const id = category?._id || category?.id;
+          const name = category?.name || category?.category || category?.title;
+
+          if (id && name) {
+            map[name.toLowerCase()] = id;
+          }
+
+          return map;
+        }, {});
+
         const apiCategories = rawCategories
           .map((category) =>
             typeof category === "string"
@@ -447,6 +488,7 @@ export default function ShopPage() {
           .filter(Boolean);
 
         setCategoryNamesById(namesById);
+        setCategoryIdsByName(idsByName);
         setCategories(["All", ...new Set(apiCategories)]);
       } catch (error) {
         setCategories(["All"]);
@@ -456,19 +498,89 @@ export default function ShopPage() {
     loadCategories();
   }, []);
 
+  useEffect(() => {
+    const loadSubCategories = async () => {
+      try {
+        const res = await getSubCategories();
+        const list = getApiList(res.data);
+        const namesById = list.reduce((map, subcategory) => {
+          const id = subcategory?._id || subcategory?.id;
+          const name = getSubCategoryName(subcategory);
+
+          if (id && name) {
+            map[id] = name;
+          }
+
+          return map;
+        }, {});
+
+        setSubCategoryNamesById(namesById);
+        setSubCategories(list);
+      } catch (error) {
+        setSubCategoryNamesById({});
+        setSubCategories([]);
+      }
+    };
+
+    loadSubCategories();
+  }, []);
+
   const getCategoryName = useCallback(
     (category) => categoryNamesById[category] || category,
     [categoryNamesById]
   );
 
+  const getSubCategoryDisplayName = useCallback(
+    (subcategory) => subCategoryNamesById[subcategory] || subcategory,
+    [subCategoryNamesById]
+  );
+
+  const selectedCategory = filters.category || "All";
+  const activeCategoryId =
+    selectedCategory !== "All"
+      ? categoryIdsByName[selectedCategory.toLowerCase()] || null
+      : null;
+
+  const visibleSubCategories = useMemo(() => {
+    if (selectedCategory === "All") return [];
+
+    return subCategories.filter((subcategory) => {
+      const parent = subcategory?.categoryId || subcategory?.category || subcategory?.parentCategory;
+      const parentId = typeof parent === "object" ? parent?._id || parent?.id : parent;
+      const parentName =
+        (typeof parent === "object" ? parent?.name || parent?.category || parent?.title : "") ||
+        subcategory?.categoryName ||
+        categoryNamesById[parentId];
+
+      return (
+        (activeCategoryId && parentId === activeCategoryId) ||
+        parentName?.toLowerCase() === selectedCategory.toLowerCase()
+      );
+    });
+  }, [activeCategoryId, categoryNamesById, selectedCategory, subCategories]);
+
   /* ================= FILTER ================= */
   const filtered = useMemo(() => {
+    const searchTerm = searchFromUrl.trim().toLowerCase();
+
     return products.filter((p) => {
       const productCategory = getCategoryName(p.category);
+      const productSubcategory = getSubCategoryDisplayName(p.subcategory);
       const cat =
         filters.category === "All" ||
         p.category === filters.category ||
         productCategory === filters.category;
+
+      const subcat =
+        filters.subcategory === "All" ||
+        !p.subcategory ||
+        p.subcategory === filters.subcategory ||
+        productSubcategory === filters.subcategory;
+
+      const search =
+        !searchTerm ||
+        p.name?.toLowerCase().includes(searchTerm) ||
+        productCategory?.toLowerCase().includes(searchTerm);
 
       const price =
         filters.price === "All" ||
@@ -483,9 +595,9 @@ export default function ShopPage() {
 
       const rating = p.rating >= filters.rating;
 
-      return cat && price && rating;
+      return cat && subcat && search && price && rating;
     });
-  }, [filters, getCategoryName, products]);
+  }, [filters, getCategoryName, getSubCategoryDisplayName, products, searchFromUrl]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PRODUCTS_PER_PAGE));
   const activePage = Math.min(currentPage, totalPages);
@@ -562,24 +674,65 @@ export default function ShopPage() {
           {/* CATEGORY CHIPS */}
           <div className="mb-5">
             <p className="text-xs text-zinc-500 mb-2">Category</p>
-            <div className="flex flex-wrap gap-2">
-              {categories.map((c) => (
+            {selectedCategory === "All" ? (
+              <div className="flex flex-wrap gap-2">
+                {categories.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() =>
+                      updateFilters((p) => ({ ...p, category: c, subcategory: "All", subcategoryId: "" }))
+                    }
+                    className={`px-3 py-1 rounded-full text-xs border transition
+                      ${
+                        filters.category === c
+                          ? "bg-black text-white"
+                          : "bg-white hover:bg-zinc-100"
+                      }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
                 <button
-                  key={c}
                   onClick={() =>
-                    updateFilters((p) => ({ ...p, category: c }))
+                    updateFilters((p) => ({ ...p, category: selectedCategory, subcategory: "All", subcategoryId: "" }))
                   }
-                  className={`px-3 py-1 rounded-full text-xs border transition
-                    ${
-                      filters.category === c
-                        ? "bg-black text-white"
-                        : "bg-white hover:bg-zinc-100"
-                    }`}
+                  className="inline-flex items-center rounded-full border border-black bg-black px-3 py-1 text-xs font-semibold text-white"
                 >
-                  {c}
+                  {selectedCategory}
                 </button>
-              ))}
-            </div>
+
+                {visibleSubCategories.length > 0 && (
+                  <div className="pt-1">
+                    <p className="mb-2 text-xs font-medium text-zinc-500">Subcategory</p>
+                    <div className="space-y-1">
+                      {visibleSubCategories.map((subcategory) => {
+                        const name = getSubCategoryName(subcategory);
+                        const id = subcategory?._id || subcategory?.id || "";
+
+                        return (
+                          <button
+                            key={id || name}
+                            onClick={() =>
+                              updateFilters((p) => ({ ...p, subcategory: name, subcategoryId: id }))
+                            }
+                            className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+                              filters.subcategory === name
+                                ? "bg-black text-white"
+                                : "text-zinc-700 hover:bg-zinc-100"
+                            }`}
+                          >
+                            {name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* PRICE */}
@@ -891,23 +1044,64 @@ export default function ShopPage() {
                 {/* CATEGORY */}
                 <div>
                   <p className="text-xs text-zinc-500 mb-2">Category</p>
-                  <div className="flex flex-wrap gap-2">
-                    {categories.map((c) => (
+                  {selectedCategory === "All" ? (
+                    <div className="flex flex-wrap gap-2">
+                      {categories.map((c) => (
+                        <button
+                          key={c}
+                          onClick={() =>
+                            updateFilters((p) => ({ ...p, category: c, subcategory: "All", subcategoryId: "" }))
+                          }
+                          className={`px-3 py-1 border rounded-full text-xs transition ${
+                            filters.category === c
+                              ? "bg-black text-white border-black"
+                              : "bg-white text-zinc-700 border-zinc-300"
+                          }`}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
                       <button
-                        key={c}
                         onClick={() =>
-                          updateFilters((p) => ({ ...p, category: c }))
+                          updateFilters((p) => ({ ...p, category: selectedCategory, subcategory: "All", subcategoryId: "" }))
                         }
-                        className={`px-3 py-1 border rounded-full text-xs transition ${
-                          filters.category === c
-                            ? "bg-black text-white border-black"
-                            : "bg-white text-zinc-700 border-zinc-300"
-                        }`}
+                        className="inline-flex items-center rounded-full border border-black bg-black px-3 py-1 text-xs font-semibold text-white"
                       >
-                        {c}
+                        {selectedCategory}
                       </button>
-                    ))}
-                  </div>
+
+                      {visibleSubCategories.length > 0 && (
+                        <div className="pt-1">
+                          <p className="mb-2 text-xs font-medium text-zinc-500">Subcategory</p>
+                          <div className="space-y-1">
+                            {visibleSubCategories.map((subcategory) => {
+                              const name = getSubCategoryName(subcategory);
+                              const id = subcategory?._id || subcategory?.id || "";
+
+                              return (
+                                <button
+                                  key={id || name}
+                                  onClick={() =>
+                                    updateFilters((p) => ({ ...p, subcategory: name, subcategoryId: id }))
+                                  }
+                                  className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+                                    filters.subcategory === name
+                                      ? "bg-black text-white"
+                                      : "text-zinc-700 hover:bg-zinc-100"
+                                  }`}
+                                >
+                                  {name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* PRICE */}

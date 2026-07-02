@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   Award,
   Check,
@@ -24,10 +24,11 @@ import {
   isValidProductImageUrl,
 } from "../apis/products/products";
 import { createCartItem, getCartDeviceId } from "../apis/cart/cart";
+import { getLoggedInCid } from "../apis/customer/customer";
 import {
   createWishlistItem,
   deleteWishlistItem,
-  getWishlistByDevice,
+  getWishlistByCidOrDevice,
 } from "../apis/wishlist/wishlist"; // <-- ADDED
 import { ProductDetailSkeleton } from "../component/PageSkeleton";
 
@@ -77,19 +78,12 @@ function getBulletPoints(item) {
     : [];
 }
 
-// Read the logged-in customer id for cart sync; guests continue with cid as null.
-function getLoggedInCid() {
-  if (typeof window === "undefined") return null;
-
-  const user = JSON.parse(localStorage.getItem("user") || "null");
-  return user?._id || user?.id || user?.cid || user?.user?._id || null;
-}
-
 export default function ProductDetailsPage({
   initialProduct = null,
   initialProductId = "",
 }) {
   const params = useParams();
+  const router = useRouter();
   const routeId = params?.id || initialProductId;
 
   const [product, setProduct] = useState(initialProduct);
@@ -199,15 +193,13 @@ export default function ProductDetailsPage({
 
   // Wishlist ab backend se load hota hai (localStorage se nahi), taaki
   // har item ka real backend _id pata rahe -- delete ke liye yahi _id chahiye.
+  // Ab cid ho tho cid se, warna divid se (cart wala hi pattern).
   useEffect(() => {
     let active = true;
 
     const loadWishlistFromBackend = async () => {
       try {
-        const divid = getCartDeviceId();
-        if (!divid) return;
-
-        const res = await getWishlistByDevice(divid);
+        const res = await getWishlistByCidOrDevice({ cid: getLoggedInCid() });
         const items = Array.isArray(res?.data?.data) ? res.data.data : [];
         if (active) setWishlistItems(items);
       } catch (err) {
@@ -314,8 +306,8 @@ export default function ProductDetailsPage({
     });
   };
 
-  const handleAddToCart = async () => {
-    if (!product || !canPurchase || addingToCart) return;
+  const handleAddToCart = async (openCart = true) => {
+    if (!product || !canPurchase || addingToCart) return false;
 
     const variantKey =
       selectedVariant?._id ||
@@ -363,7 +355,7 @@ export default function ProductDetailsPage({
       return [...prev, cartProduct];
     });
 
-    setCartOpen(true);
+    if (openCart) setCartOpen(true);
 
     try {
       await createCartItem({
@@ -374,14 +366,21 @@ export default function ProductDetailsPage({
         variantId: selectedVariant?._id || null,
         offerDiscount: discount || product.discount || 0,
       });
+      return true;
     } catch (err) {
       console.error(
         "Cart API failed",
         err.response?.data?.message || err.message
       );
+      return false;
     } finally {
       setAddingToCart(false);
     }
+  };
+
+  const handleBuyNow = async () => {
+    const added = await handleAddToCart(false);
+    if (added) router.push("/Addtocard");
   };
 
   // ----- FIXED: ab backend ke real _id ke saath kaam karta hai -----
@@ -754,7 +753,15 @@ export default function ProductDetailsPage({
                   Tomorrow
                 </p>
 
-                <p className="mt-4 text-lg font-medium text-[#007600]">
+                <p
+                  className={`mt-4 text-lg font-medium ${
+                    stock == null
+                      ? "text-[#565959]"
+                      : stock > 0
+                        ? "text-[#007600]"
+                        : "text-red-600"
+                  }`}
+                >
                   {stock == null
                     ? "Availability not listed"
                     : stock > 0
@@ -777,14 +784,18 @@ export default function ProductDetailsPage({
 
                 <div className="mt-4 space-y-2">
                   <button
-                    onClick={handleAddToCart}
+                    onClick={() => handleAddToCart()}
                     disabled={!canPurchase || addingToCart}
                     className="h-10 w-full rounded-full bg-[#FFD814] text-sm font-medium text-[#0F1111] transition hover:bg-[#F7CA00] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {addingToCart ? "Adding..." : "Add to Cart"}
                   </button>
-                  <button className="h-10 w-full rounded-full bg-[#FFA41C] text-sm font-medium text-[#0F1111] transition hover:bg-[#FA8900]">
-                    Buy Now
+                  <button
+                    onClick={handleBuyNow}
+                    disabled={!canPurchase || addingToCart}
+                    className="h-10 w-full rounded-full bg-[#FFA41C] text-sm font-medium text-[#0F1111] transition hover:bg-[#FA8900] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {addingToCart ? "Adding..." : "Buy Now"}
                   </button>
                   <button
                     onClick={handleToggleWishlist}
@@ -828,15 +839,19 @@ export default function ProductDetailsPage({
 
         <div className="fixed bottom-0 left-0 z-50 flex w-full gap-3 border-t border-gray-200 bg-white p-3 backdrop-blur-md lg:hidden">
           <button
-            onClick={handleAddToCart}
+            onClick={() => handleAddToCart()}
             disabled={!canPurchase || addingToCart}
             className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-black text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-60"
           >
             <ShoppingCart size={16} />
             {addingToCart ? "Adding..." : "Add to Cart"}
           </button>
-          <button className="h-12 flex-1 rounded-xl bg-[#FF9900] text-sm font-medium text-black transition hover:bg-[#e68a00]">
-            Buy Now
+          <button
+            onClick={handleBuyNow}
+            disabled={!canPurchase || addingToCart}
+            className="h-12 flex-1 rounded-xl bg-[#FF9900] text-sm font-medium text-black transition hover:bg-[#e68a00] disabled:opacity-60"
+          >
+            {addingToCart ? "Adding..." : "Buy Now"}
           </button>
         </div>
       </main>

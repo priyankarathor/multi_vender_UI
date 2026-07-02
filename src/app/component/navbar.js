@@ -3,9 +3,12 @@
 import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { loginUser } from "../apis/login/login";
 import { registerVendor } from "../apis/register/register";
+import { saveCustomerSession } from "../apis/customer/customer";
+import { syncDeviceCartToCustomer } from "../apis/cart/cart";
+import { syncDeviceWishlistToCustomer } from "../apis/wishlist/wishlist";
 import { getCategories } from "../apis/category/category";
 import { getSubCategories } from "../apis/subcategory/subcategory";
 import { getSubToSubCategories } from "../apis/subtosubcategory/subtosubcategory";
@@ -20,6 +23,7 @@ import {
   X,
   Store,
   ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 
 const getApiList = (payload) => {
@@ -34,6 +38,8 @@ const getApiList = (payload) => {
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [allMenuOpen, setAllMenuOpen] = useState(false);
   const [vendorModalOpen, setVendorModalOpen] = useState(false);
@@ -64,11 +70,27 @@ export default function Navbar() {
   const categoryPreviewTimeoutRef = useRef(null);
 
   const [mobileExpandedSubId, setMobileExpandedSubId] = useState(null);
+  const [searchCategory, setSearchCategory] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchCategoryWidth = Math.min(
+    180,
+    Math.max(84, searchCategory.length * 9 + 54)
+  );
 
   useEffect(() => {
     const updateWishlistCount = () => {
       const savedItems = JSON.parse(localStorage.getItem("wishlistItems") || "[]");
-      setWishlistCount(Array.isArray(savedItems) ? savedItems.length : 0);
+      const currentCount = Array.isArray(savedItems) ? savedItems.length : 0;
+      const seenCountRaw = localStorage.getItem("wishlistSeenCount");
+
+      if (seenCountRaw == null) {
+        localStorage.setItem("wishlistSeenCount", String(currentCount));
+        setWishlistCount(0);
+        return;
+      }
+
+      const seenCount = Number(seenCountRaw) || 0;
+      setWishlistCount(Math.max(0, currentCount - seenCount));
     };
 
     updateWishlistCount();
@@ -80,6 +102,26 @@ export default function Navbar() {
       window.removeEventListener("storage", updateWishlistCount);
     };
   }, []);
+
+  useEffect(() => {
+    if (pathname !== "/Wishlist") return;
+
+    const timer = window.setTimeout(() => {
+      const savedItems = JSON.parse(localStorage.getItem("wishlistItems") || "[]");
+      const currentCount = Array.isArray(savedItems) ? savedItems.length : 0;
+      localStorage.setItem("wishlistSeenCount", String(currentCount));
+      setWishlistCount(0);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [pathname]);
+
+  const clearWishlistBadge = () => {
+    const savedItems = JSON.parse(localStorage.getItem("wishlistItems") || "[]");
+    const currentCount = Array.isArray(savedItems) ? savedItems.length : 0;
+    localStorage.setItem("wishlistSeenCount", String(currentCount));
+    setWishlistCount(0);
+  };
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -126,14 +168,23 @@ export default function Navbar() {
       return;
     }
 
-    const categoryName = new URLSearchParams(window.location.search).get("category");
-    if (!categoryName) return;
+    const categoryName = searchParams.get("category");
+    if (!categoryName) {
+      setActiveCategoryId(null);
+      setPreviewCategoryId(null);
+      setSearchCategory("All");
+      return;
+    }
 
     const matchedCategory = categories.find(
       (cat) => cat.name?.toLowerCase() === categoryName.toLowerCase()
     );
-    if (matchedCategory) setActiveCategoryId(matchedCategory._id);
-  }, [pathname, categories]);
+    if (matchedCategory) {
+      setActiveCategoryId(matchedCategory._id);
+      setPreviewCategoryId(null);
+      setSearchCategory(matchedCategory.name);
+    }
+  }, [pathname, categories, searchParams]);
 
   const visibleCategoryId = previewCategoryId || activeCategoryId;
 
@@ -157,8 +208,15 @@ export default function Navbar() {
     e.preventDefault();
     try {
       const res = await loginUser(userForm);
-      localStorage.setItem("user", JSON.stringify(res.data));
-      if (res.data?.token) localStorage.setItem("userToken", res.data.token);
+      const cid = saveCustomerSession(res.data);
+      try {
+        await Promise.all([
+          syncDeviceCartToCustomer(cid),
+          syncDeviceWishlistToCustomer(cid),
+        ]);
+      } catch (cartError) {
+        console.error("Cart/Wishlist cid sync failed", cartError);
+      }
       alert("User Login Successfully!");
       setUserForm({ email: "", password: "" });
       setUserModalOpen(false);
@@ -169,8 +227,16 @@ export default function Navbar() {
 
   const handleCreateVendor = async (e) => {
     e.preventDefault();
+    const email = vendorForm.email.trim();
+
+    if (!email) {
+      alert("Please enter email.");
+      return;
+    }
+
     try {
-      await registerVendor(vendorForm);
+      const payload = { ...vendorForm, email };
+      await registerVendor(payload);
       alert("✅ Vendor Created Successfully!");
       setVendorForm({
         name: "", email: "", number: "", password: "",
@@ -207,6 +273,43 @@ export default function Navbar() {
 
   const handleSubMouseLeave = () => {
     hoverTimeoutRef.current = setTimeout(() => setHoveredSubId(null), 150);
+  };
+
+  const handleSearchSubmit = (event) => {
+    event.preventDefault();
+
+    const params = new URLSearchParams();
+    const trimmedQuery = searchQuery.trim();
+
+    if (searchCategory !== "All") params.set("category", searchCategory);
+    if (trimmedQuery) params.set("search", trimmedQuery);
+
+    const matchedCategory = categories.find(
+      (cat) => cat.name?.toLowerCase() === searchCategory.toLowerCase()
+    );
+    setActiveCategoryId(matchedCategory?._id || null);
+    setPreviewCategoryId(null);
+
+    router.push(`/shop${params.toString() ? `?${params.toString()}` : ""}`);
+  };
+
+  const handleSearchCategoryChange = (event) => {
+    const nextCategory = event.target.value;
+    setSearchCategory(nextCategory);
+
+    const params = new URLSearchParams();
+    const trimmedQuery = searchQuery.trim();
+
+    if (nextCategory !== "All") params.set("category", nextCategory);
+    if (trimmedQuery) params.set("search", trimmedQuery);
+
+    const matchedCategory = categories.find(
+      (cat) => cat.name?.toLowerCase() === nextCategory.toLowerCase()
+    );
+    setActiveCategoryId(matchedCategory?._id || null);
+    setPreviewCategoryId(null);
+
+    router.push(`/shop${params.toString() ? `?${params.toString()}` : ""}`);
   };
 
   return (
@@ -274,14 +377,47 @@ export default function Navbar() {
               Jajot
             </Link>
 
-            <div className="hidden md:flex flex-1 max-w-[500px] mx-6">
-              <div className="flex items-center gap-2 w-full px-4 h-11 rounded-xl border border-white/10 bg-white/5">
-                <Search size={16} className="text-[#FF9900]" />
+            <div className="hidden md:flex flex-1 max-w-[560px] mx-6">
+              <form
+                onSubmit={handleSearchSubmit}
+                className="flex h-11 w-full overflow-hidden rounded-2xl border border-white/15 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-all duration-200 focus-within:border-[#FF9900] focus-within:ring-4 focus-within:ring-[#FF9900]/20"
+              >
+                <div
+                  style={{ width: `${searchCategoryWidth}px` }}
+                  className="relative shrink-0 border-r border-gray-200 bg-gray-50 transition hover:bg-gray-100"
+                >
+                  <select
+                    value={searchCategory}
+                    onChange={handleSearchCategoryChange}
+                    className="h-full w-full appearance-none bg-transparent pl-4 pr-10 text-sm font-semibold text-gray-800 outline-none"
+                    aria-label="Search category"
+                  >
+                    <option value="All">All</option>
+                    {categories.map((cat) => (
+                      <option key={cat._id || cat.name} value={cat.name}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={16}
+                    className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-700"
+                  />
+                </div>
                 <input
-                  placeholder="Search products..."
-                  className="flex-1 bg-transparent outline-none text-sm text-white placeholder:text-white/40"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search Amazon.in"
+                  className="min-w-0 flex-1 bg-white px-4 text-sm font-medium text-gray-900 outline-none placeholder:font-normal placeholder:text-gray-500"
                 />
-              </div>
+                <button
+                  type="submit"
+                  className="flex w-14 items-center justify-center bg-[#FF9900] text-black transition hover:bg-[#f3a847] active:bg-[#e68a00]"
+                  aria-label="Search"
+                >
+                  <Search size={21} />
+                </button>
+              </form>
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-2">
@@ -293,6 +429,7 @@ export default function Navbar() {
               </button>
               <Link
                 href="/Wishlist"
+                onClick={clearWishlistBadge}
                 className="relative w-9 h-9 sm:w-10 sm:h-10 border border-white/10 rounded-xl flex items-center justify-center text-white hover:border-[#FF9900] hover:text-[#FF9900] transition-colors"
               >
                 <Heart size={18} />
@@ -350,6 +487,7 @@ export default function Navbar() {
               onClick={() => {
                 setActiveCategoryId(null);
                 setPreviewCategoryId(null);
+                setSearchCategory("All");
               }}
               className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors ${
                 isActive("/")
@@ -368,6 +506,7 @@ export default function Navbar() {
                 onClick={() => {
                   setActiveCategoryId(cat._id);
                   setPreviewCategoryId(cat._id);
+                  setSearchCategory(cat.name);
                 }}
                 className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors ${
                   activeCategoryId === cat._id
@@ -596,7 +735,10 @@ export default function Navbar() {
               <div className="flex gap-2">
                 <Link
                   href="/Wishlist"
-                  onClick={() => setMobileOpen(false)}
+                  onClick={() => {
+                    clearWishlistBadge();
+                    setMobileOpen(false);
+                  }}
                   className="flex-1 h-10 rounded-xl border border-white/10 flex items-center justify-center gap-2 text-white/80 text-sm hover:border-[#FF9900] hover:text-[#FF9900] transition-colors"
                 >
                   <Heart size={16} /> Wishlist

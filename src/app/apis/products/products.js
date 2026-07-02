@@ -233,6 +233,20 @@ export function normalizeProduct(product) {
       product?.categoryName ||
       product?.categoryId ||
       "Products",
+    subcategory:
+      product?.subcategory?.name ||
+      product?.subCategory?.name ||
+      product?.subcategoryId?.name ||
+      product?.subCategoryId?.name ||
+      product?.subcategoryName ||
+      product?.subCategoryName ||
+      product?.subcategory?._id ||
+      product?.subCategory?._id ||
+      product?.subcategoryId?._id ||
+      product?.subCategoryId?._id ||
+      product?.subcategoryId ||
+      product?.subCategoryId ||
+      "",
     attributes,
     price,
     mrp,
@@ -251,13 +265,50 @@ export function normalizeProduct(product) {
   };
 }
 
-export async function fetchProducts() {
-  const response = await fetch(PRODUCT_API_URL, {
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    throw new Error("Failed to load products");
+async function fetchFirstOk(urls) {
+  let lastError = null;
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {
+        cache: "no-store",
+      });
+
+      if (response.ok) return response;
+      lastError = new Error("Failed to load products");
+    } catch (error) {
+      lastError = error;
+    }
   }
+
+  throw lastError || new Error("Failed to load products");
+}
+
+export async function fetchProducts(filters = {}) {
+  const urls = [PRODUCT_API_URL];
+  const params = new URLSearchParams();
+
+  if (filters.category && filters.category !== "All") {
+    params.set("category", filters.category);
+  }
+
+  if (filters.subcategory && filters.subcategory !== "All") {
+    params.set("subcategory", filters.subcategory);
+  }
+
+  if (filters.subcategoryId) {
+    params.set("subcategoryId", filters.subcategoryId);
+  }
+
+  if (params.toString()) {
+    urls.unshift(`${PRODUCT_API_URL}?${params.toString()}`);
+  }
+
+  if (filters.subcategoryId) {
+    urls.unshift(`${PRODUCT_API_URL}/subcategory/${filters.subcategoryId}`);
+  }
+
+  const response = await fetchFirstOk(urls);
 
   const payload = await response.json();
   const products = getProductsFromPayload(payload);

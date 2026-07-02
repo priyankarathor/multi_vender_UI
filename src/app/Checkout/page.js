@@ -7,6 +7,7 @@ import AddressForm from "./address";
 import CartItems from "../component/CartItems";
 import OrderSummary from "../component/OrderSummary";
 import { placeOrder } from "../apis/order/order";
+import { deleteCartItem } from "../apis/cart/cart";
 
 function getCheckoutItemPrice(item) {
   return Number(
@@ -173,9 +174,27 @@ export default function CheckoutPage() {
     try {
       setPlacingOrder(true);
       await placeOrder(payload);
+      const orderedCartIds = cartItems
+        .map((item) => item?._id || item?.cartId || item?.id)
+        .filter(isValidObjectId);
+
+      const deleteResults = await Promise.allSettled(
+        orderedCartIds.map((id) => deleteCartItem(id))
+      );
+
+      deleteResults.forEach((result, idx) => {
+        if (result.status === "rejected") {
+          console.error(
+            "Failed to remove ordered cart item",
+            orderedCartIds[idx],
+            result.reason?.response?.data || result.reason?.message || result.reason
+          );
+        }
+      });
 
       localStorage.removeItem("checkoutData");
       localStorage.removeItem("cartItems");
+      window.dispatchEvent(new Event("cartUpdated"));
 
       alert("Order placed successfully!");
       router.push("/");

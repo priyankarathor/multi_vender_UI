@@ -6,11 +6,11 @@ import { Heart, ShoppingCart, Trash2 } from "lucide-react";
 import PageSkeleton from "../component/PageSkeleton";
 import { getCategories } from "../apis/category/category";
 import {
-  getWishlistByDevice,
+  getWishlistByCidOrDevice,
   deleteWishlistItem,
   updateWishlistItem,
 } from "../apis/wishlist/wishlist";
-import { getCartDeviceId } from "../apis/cart/cart"; // <-- cart wala SAME device id function use kiya
+import { getLoggedInCid } from "../apis/customer/customer";
 
 const getApiList = (payload) => {
   if (Array.isArray(payload)) return payload;
@@ -27,10 +27,7 @@ export default function WishlistPage() {
 
   const fetchWishlist = async () => {
     try {
-      const divid = getCartDeviceId();
-      if (!divid) return;
-
-      const res = await getWishlistByDevice(divid);
+      const res = await getWishlistByCidOrDevice({ cid: getLoggedInCid() });
       const items = getApiList(res.data);
       setWishlistItems(items);
     } catch (error) {

@@ -4,7 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { userLogin } from "../apis/userlogin/userlogin";
 import { userRegister } from "../apis/userregister/userregister";
-import { getCartItems } from "../apis/cart/cart";
+import {
+  buildCartUpdatePayload,
+  getCartItems,
+  syncDeviceCartToCustomer,
+  updateCartItem,
+} from "../apis/cart/cart";
+import { getLoggedInCid, saveCustomerSession } from "../apis/customer/customer";
+import { syncDeviceWishlistToCustomer } from "../apis/wishlist/wishlist";
 import {
   Heart,
   Minus,
@@ -50,21 +57,23 @@ export default function CartPage() {
     pincode: "",
   });
 
-  useEffect(() => {
-    const fetchCart = async () => {
-      try {
-        const cid = typeof window !== "undefined" ? localStorage.getItem("cid") : null;
-        const res = await getCartItems({ cid });
-        const items = res.data?.data || [];
-        setCartItems(items);
-        setSelectedItemIds(items.map((item) => item._id).filter(Boolean));
-      } catch (error) {
-        console.log(error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // reusable fetcher — cid ho tho cid se, warna divid se (getCartItems ke andar hi handle hota hai)
+  const fetchCart = async (cid = getLoggedInCid()) => {
+    try {
+      setLoading(true);
+      const res = await getCartItems({ cid });
+      const items = res.data?.data || res.data || [];
+      const list = Array.isArray(items) ? items : [];
+      setCartItems(list);
+      setSelectedItemIds(list.map((item) => item._id).filter(Boolean));
+    } catch (error) {
+      console.log("fetchCart error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchCart();
   }, []);
 
@@ -122,23 +131,37 @@ export default function CartPage() {
 
   const getQty = (item) => item.qty || 1;
 
+  const syncCartQty = async (item, nextQty) => {
+    if (!item?._id) return;
+
+    try {
+      await updateCartItem(item._id, buildCartUpdatePayload(item, getLoggedInCid(), nextQty));
+    } catch (error) {
+      console.error("Failed to update cart qty", error);
+    }
+  };
+
   const increaseQty = (item) => {
+    const nextQty = getQty(item) + 1;
     setCartItems((prev) =>
       prev.map((i) =>
-        i._id === item._id ? { ...i, qty: getQty(item) + 1 } : i
+        i._id === item._id ? { ...i, qty: nextQty } : i
       )
     );
+    syncCartQty(item, nextQty);
   };
 
   const decreaseQty = (item) => {
     const currentQty = getQty(item);
     if (currentQty <= 1) return;
+    const nextQty = currentQty - 1;
 
     setCartItems((prev) =>
       prev.map((i) =>
-        i._id === item._id ? { ...i, qty: currentQty - 1 } : i
+        i._id === item._id ? { ...i, qty: nextQty } : i
       )
     );
+    syncCartQty(item, nextQty);
   };
 
   const removeItem = (item) => {
@@ -195,9 +218,13 @@ export default function CartPage() {
       setLoginLoading(true);
       const res = await userLogin(loginForm);
 
-      localStorage.setItem("user", JSON.stringify(res.data));
+      const cid = saveCustomerSession(res.data);
       localStorage.setItem("checkoutUser", JSON.stringify(res.data));
-      if (res.data?.token) localStorage.setItem("userToken", res.data.token);
+      await Promise.all([
+        syncDeviceCartToCustomer(cid),
+        syncDeviceWishlistToCustomer(cid),
+      ]);
+      await fetchCart(cid); // 👈 naye cid ke saath cart turant refresh
 
       setLoginForm({ email: "", password: "" });
       setLoginModalOpen(false);
@@ -238,9 +265,13 @@ export default function CartPage() {
       setRegisterLoading(true);
       const res = await userRegister(registerForm);
 
-      localStorage.setItem("user", JSON.stringify(res.data));
+      const cid = saveCustomerSession(res.data);
       localStorage.setItem("checkoutUser", JSON.stringify(res.data));
-      if (res.data?.token) localStorage.setItem("userToken", res.data.token);
+      await Promise.all([
+        syncDeviceCartToCustomer(cid),
+        syncDeviceWishlistToCustomer(cid),
+      ]);
+      await fetchCart(cid); // 👈 naye cid ke saath cart turant refresh
 
       setRegisterModalOpen(false);
       alert("Registration successful. You can proceed to checkout now.");
@@ -272,7 +303,6 @@ export default function CartPage() {
     const checkoutData = {
       items: selectedCartItems,
       subtotal,
-      tax,
       total,
       createdAt: new Date().toISOString(),
     };
@@ -290,8 +320,7 @@ export default function CartPage() {
     0
   );
 
-  const tax = Math.round(subtotal * 0.05);
-  const total = subtotal + tax;
+  const total = subtotal;
 
   if (loading) {
     return (
@@ -609,11 +638,6 @@ export default function CartPage() {
                 <span>Shipping</span>
 
                 <span className="text-green-600 font-medium">FREE</span>
-              </div>
-
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Tax</span>
-                <span>₹{tax.toLocaleString()}</span>
               </div>
 
               {/* FREE DELIVERY */}
