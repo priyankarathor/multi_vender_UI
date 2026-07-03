@@ -12,6 +12,8 @@ import {
 } from "../apis/cart/cart";
 import { getLoggedInCid, saveCustomerSession } from "../apis/customer/customer";
 import { syncDeviceWishlistToCustomer } from "../apis/wishlist/wishlist";
+import { GoogleLogin } from "@react-oauth/google";
+import { jwtDecode } from "jwt-decode";
 import {
   Heart,
   Minus,
@@ -28,6 +30,9 @@ import {
 
 export default function CartPage() {
   const router = useRouter();
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+  const hasGoogleClientId =
+    googleClientId && googleClientId !== "your_google_client_id_here";
   const [cartItems, setCartItems] = useState([]);
   const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +79,11 @@ export default function CartPage() {
   };
 
   useEffect(() => {
-    fetchCart();
+    const timer = window.setTimeout(() => {
+      fetchCart();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, []);
 
   const recommendedProducts = [
@@ -282,6 +291,39 @@ export default function CartPage() {
     }
   };
 
+  // ---------------- GOOGLE LOGIN (autofill only, existing login/register logic untouched) ----------------
+
+  // Login modal me Google button click hone par decode karke email
+  // login form me daal do, password user khud type karega.
+  const handleGoogleLoginSuccess = (credentialResponse) => {
+    try {
+      const decoded = jwtDecode(credentialResponse.credential);
+
+      setLoginForm((prev) => ({
+        ...prev,
+        email: decoded.email || prev.email,
+      }));
+    } catch (err) {
+      console.error("Google decode error (login):", err);
+    }
+  };
+
+  // Register modal me Google button click hone par naam aur email
+  // auto-fill ho jayenge, baaki fields user khud bharega.
+  const handleGoogleRegisterSuccess = (credentialResponse) => {
+    try {
+      const decoded = jwtDecode(credentialResponse.credential);
+
+      setRegisterForm((prev) => ({
+        ...prev,
+        name: decoded.name || prev.name,
+        email: decoded.email || prev.email,
+      }));
+    } catch (err) {
+      console.error("Google decode error (register):", err);
+    }
+  };
+
   // ---------------- CHECKOUT ----------------
 
   const handleCheckout = () => {
@@ -321,6 +363,7 @@ export default function CartPage() {
   );
 
   const total = subtotal;
+  const canProceedToCheckout = cartItems.length > 0 && selectedCartItems.length > 0;
 
   if (loading) {
     return (
@@ -672,7 +715,12 @@ export default function CartPage() {
             {/* BUTTON */}
             <button
               onClick={handleCheckout}
-              className="w-full h-12 rounded-xl bg-black hover:bg-gray-900 text-white font-semibold mt-6 transition"
+              disabled={!canProceedToCheckout}
+              className={`w-full h-12 rounded-xl font-semibold mt-6 transition ${
+                canProceedToCheckout
+                  ? "bg-black hover:bg-gray-900 text-white"
+                  : "cursor-not-allowed bg-gray-200 text-gray-500"
+              }`}
             >
               Proceed to Checkout
             </button>
@@ -755,6 +803,28 @@ export default function CartPage() {
                 </div>
               </div>
 
+              {/* GOOGLE LOGIN - autofills email above, existing submit logic untouched */}
+              <div className="mt-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-px flex-1 bg-gray-200" />
+                  <span className="text-xs text-gray-400">OR</span>
+                  <div className="h-px flex-1 bg-gray-200" />
+                </div>
+
+                <div className="flex justify-center">
+                  {hasGoogleClientId ? (
+                    <GoogleLogin
+                      onSuccess={handleGoogleLoginSuccess}
+                      onError={() => console.log("Google Login Failed")}
+                    />
+                  ) : (
+                    <p className="text-xs text-red-500">
+                      Add Google client id in root .env.local
+                    </p>
+                  )}
+                </div>
+              </div>
+
               <p className="text-xs text-gray-500 mt-4">
                 New here?{" "}
                 <button
@@ -813,7 +883,7 @@ export default function CartPage() {
                   Create Account
                 </h2>
                 <p className="text-gray-300 text-sm mt-1">
-                  Looks like you don't have an account yet. Please register to continue.
+                  Looks like you don&apos;t have an account yet. Please register to continue.
                 </p>
               </div>
 
@@ -930,6 +1000,28 @@ export default function CartPage() {
                     placeholder="Pincode"
                     className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
                   />
+                </div>
+              </div>
+
+              {/* GOOGLE LOGIN - autofills name + email above, existing submit logic untouched */}
+              <div className="mt-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-px flex-1 bg-gray-200" />
+                  <span className="text-xs text-gray-400">OR</span>
+                  <div className="h-px flex-1 bg-gray-200" />
+                </div>
+
+                <div className="flex justify-center">
+                  {hasGoogleClientId ? (
+                    <GoogleLogin
+                      onSuccess={handleGoogleRegisterSuccess}
+                      onError={() => console.log("Google Login Failed")}
+                    />
+                  ) : (
+                    <p className="text-xs text-red-500">
+                      Add Google client id in root .env.local
+                    </p>
+                  )}
                 </div>
               </div>
 

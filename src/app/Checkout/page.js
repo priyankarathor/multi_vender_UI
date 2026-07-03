@@ -122,6 +122,18 @@ export default function CheckoutPage() {
     }
   }, [router]);
 
+  const canProceedFromBag = cartItems.length > 0;
+
+  const handleProceedFromBag = () => {
+    if (!canProceedFromBag) {
+      alert("Your cart is empty. Please add an item before checkout.");
+      router.replace("/Addtocard");
+      return;
+    }
+
+    setCurrentStep("ADDRESS");
+  };
+
   const handleSaveAddress = async (address) => {
     if (cartItems.length === 0) {
       alert("Your cart is empty.");
@@ -258,8 +270,13 @@ export default function CheckoutPage() {
                 <CartItems items={cartItems} />
 
                 <button
-                  onClick={() => setCurrentStep("ADDRESS")}
-                  className="mt-4 w-full sm:w-auto px-8 h-12 rounded-md bg-[#FF9900] hover:bg-[#e68a00] text-black text-sm font-bold tracking-wide transition"
+                  onClick={handleProceedFromBag}
+                  disabled={!canProceedFromBag}
+                  className={`mt-4 w-full sm:w-auto px-8 h-12 rounded-md text-sm font-bold tracking-wide transition ${
+                    canProceedFromBag
+                      ? "bg-[#FF9900] hover:bg-[#e68a00] text-black"
+                      : "cursor-not-allowed bg-gray-200 text-gray-500"
+                  }`}
                 >
                   PLACE ORDER
                 </button>
@@ -274,7 +291,8 @@ export default function CheckoutPage() {
           <div className="lg:sticky lg:top-44 self-start">
             <OrderSummary
               items={cartItems}
-              onProceed={() => setCurrentStep("ADDRESS")}
+              onProceed={handleProceedFromBag}
+              disabled={!canProceedFromBag}
             />
           </div>
         </div>

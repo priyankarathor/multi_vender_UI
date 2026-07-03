@@ -705,30 +705,27 @@ export default function ShopPage() {
                 </button>
 
                 {visibleSubCategories.length > 0 && (
-                  <div className="pt-1">
-                    <p className="mb-2 text-xs font-medium text-zinc-500">Subcategory</p>
-                    <div className="space-y-1">
-                      {visibleSubCategories.map((subcategory) => {
-                        const name = getSubCategoryName(subcategory);
-                        const id = subcategory?._id || subcategory?.id || "";
+                  <div className="pt-1 space-y-1">
+                    {visibleSubCategories.map((subcategory) => {
+                      const name = getSubCategoryName(subcategory);
+                      const id = subcategory?._id || subcategory?.id || "";
 
-                        return (
-                          <button
-                            key={id || name}
-                            onClick={() =>
-                              updateFilters((p) => ({ ...p, subcategory: name, subcategoryId: id }))
-                            }
-                            className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition ${
-                              filters.subcategory === name
-                                ? "bg-black text-white"
-                                : "text-zinc-700 hover:bg-zinc-100"
-                            }`}
-                          >
-                            {name}
-                          </button>
-                        );
-                      })}
-                    </div>
+                      return (
+                        <button
+                          key={id || name}
+                          onClick={() =>
+                            updateFilters((p) => ({ ...p, subcategory: name, subcategoryId: id }))
+                          }
+                          className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+                            filters.subcategory === name
+                              ? "bg-black text-white"
+                              : "text-zinc-700 hover:bg-zinc-100"
+                          }`}
+                        >
+                          {name}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1074,30 +1071,27 @@ export default function ShopPage() {
                       </button>
 
                       {visibleSubCategories.length > 0 && (
-                        <div className="pt-1">
-                          <p className="mb-2 text-xs font-medium text-zinc-500">Subcategory</p>
-                          <div className="space-y-1">
-                            {visibleSubCategories.map((subcategory) => {
-                              const name = getSubCategoryName(subcategory);
-                              const id = subcategory?._id || subcategory?.id || "";
+                        <div className="pt-1 space-y-1">
+                          {visibleSubCategories.map((subcategory) => {
+                            const name = getSubCategoryName(subcategory);
+                            const id = subcategory?._id || subcategory?.id || "";
 
-                              return (
-                                <button
-                                  key={id || name}
-                                  onClick={() =>
-                                    updateFilters((p) => ({ ...p, subcategory: name, subcategoryId: id }))
-                                  }
-                                  className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition ${
-                                    filters.subcategory === name
-                                      ? "bg-black text-white"
-                                      : "text-zinc-700 hover:bg-zinc-100"
-                                  }`}
-                                >
-                                  {name}
-                                </button>
-                              );
-                            })}
-                          </div>
+                            return (
+                              <button
+                                key={id || name}
+                                onClick={() =>
+                                  updateFilters((p) => ({ ...p, subcategory: name, subcategoryId: id }))
+                                }
+                                className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+                                  filters.subcategory === name
+                                    ? "bg-black text-white"
+                                    : "text-zinc-700 hover:bg-zinc-100"
+                                }`}
+                              >
+                                {name}
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
                     </div>

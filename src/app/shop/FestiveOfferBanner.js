@@ -90,10 +90,10 @@ export default function FestiveOfferBanner() {
   const banner = banners[index];
 
   return (
-    <section className="mt-6 mx-auto max-w-[900px]">
+    <section className="mt-6 mx-auto w-full max-w-[1040px] px-4">
       {/* MAIN BANNER */}
       <div
-        className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${banner.bg} shadow-[0_15px_60px_rgba(0,0,0,0.12)] transition-colors duration-700`}
+        className={`relative overflow-hidden bg-gradient-to-br ${banner.bg} shadow-[0_15px_60px_rgba(0,0,0,0.12)] transition-colors duration-700`}
       >
         <AnimatePresence mode="wait">
           <motion.div
@@ -102,10 +102,10 @@ export default function FestiveOfferBanner() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -30 }}
             transition={{ duration: 0.5, ease: "easeInOut" }}
-            className="relative z-10 grid items-center gap-0 md:grid-cols-2"
+            className="relative z-10 grid items-center gap-5 px-5 py-8 md:grid-cols-[0.95fr_1.05fr] md:px-8 md:py-10 lg:px-10"
           >
             {/* LEFT - TEXT */}
-            <div className="px-6 py-10 md:px-10 lg:px-14 lg:py-14">
+            <div>
               <p className="text-base font-medium text-white/85 md:text-lg">
                 {banner.eventLabel}
               </p>
@@ -128,12 +128,12 @@ export default function FestiveOfferBanner() {
             </div>
 
             {/* RIGHT - IMAGE */}
-            <div className="relative h-[260px] w-full md:h-[330px] lg:h-[400px]">
+            <div className="relative h-[220px] w-full md:h-[260px] lg:h-[278px]">
               <Image
                 src={banner.image}
                 alt={banner.collectionName}
                 fill
-                className="object-contain p-4"
+                className="object-cover"
                 sizes="(max-width: 767px) 100vw, 50vw"
               />
             </div>

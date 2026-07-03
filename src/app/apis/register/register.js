@@ -5,7 +5,7 @@ export const registerVendor = (vendorData) => {
 };
 
 export const sendVendorOtp = (email) => {
-  return api.post("/users/verify-otp", { email, role: "vendor" });
+  return api.post("/users/send-otp", { email, role: "vendor" }, { timeout: 30000 });
 };
 
 export const verifyVendorOtp = ({ email, otp }) => {

@@ -1,6 +1,6 @@
 import { ShieldCheck, Truck } from "lucide-react";
 
-export default function OrderSummary({ items = [], onProceed }) {
+export default function OrderSummary({ items = [], onProceed, disabled = false }) {
   const subtotal = items.reduce(
     (sum, item) =>
       sum + (Number(item.price) || 0) * (item.qty || item.quantity || 1),
@@ -11,7 +11,12 @@ export default function OrderSummary({ items = [], onProceed }) {
     <div className="bg-white border border-gray-200 rounded-xl p-5 sticky top-4">
       <button
         onClick={onProceed}
-        className="w-full bg-[#FF9900] hover:bg-[#e68a00] text-black font-medium py-3 rounded-lg transition-colors text-sm mb-4"
+        disabled={disabled}
+        className={`w-full font-medium py-3 rounded-lg transition-colors text-sm mb-4 ${
+          disabled
+            ? "cursor-not-allowed bg-gray-200 text-gray-500"
+            : "bg-[#FF9900] hover:bg-[#e68a00] text-black"
+        }`}
       >
         Deliver to this address
       </button>

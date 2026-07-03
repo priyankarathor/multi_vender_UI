@@ -2,10 +2,16 @@
 
 import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
+import axios from "axios";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { loginUser } from "../apis/login/login";
-import { registerVendor } from "../apis/register/register";
+import {
+  registerVendor,
+  resendVendorOtp,
+  sendVendorOtp,
+  verifyVendorOtp,
+} from "../apis/register/register";
 import { saveCustomerSession } from "../apis/customer/customer";
 import { syncDeviceCartToCustomer } from "../apis/cart/cart";
 import { syncDeviceWishlistToCustomer } from "../apis/wishlist/wishlist";
@@ -23,7 +29,7 @@ import {
   X,
   Store,
   ChevronRight,
-  ChevronDown,
+  MessageCircle,
 } from "lucide-react";
 
 const getApiList = (payload) => {
@@ -36,6 +42,19 @@ const getApiList = (payload) => {
   return [];
 };
 
+const WHATSAPP_OTP_API_URL =
+  process.env.NEXT_PUBLIC_WHATSAPP_OTP_API_URL || "/api/send-whatsapp-otp";
+
+const getSafeWhatsAppUrl = (url) => {
+  if (!url) return "";
+
+  try {
+    return new URL(url).toString();
+  } catch {
+    return new URL(url, window.location.origin).toString();
+  }
+};
+
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -43,8 +62,14 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [allMenuOpen, setAllMenuOpen] = useState(false);
   const [vendorModalOpen, setVendorModalOpen] = useState(false);
+  const [vendorStep, setVendorStep] = useState("email"); // "email" -> "form"
+  const [vendorEmail, setVendorEmail] = useState("");
+  const [vendorOtp, setVendorOtp] = useState("");
+  const [vendorOtpLoading, setVendorOtpLoading] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [wishlistCount, setWishlistCount] = useState(0);
+  const [whatsappOtpLoading, setWhatsappOtpLoading] = useState(false);
 
   const [vendorForm, setVendorForm] = useState({
     name: "",
@@ -72,10 +97,6 @@ export default function Navbar() {
   const [mobileExpandedSubId, setMobileExpandedSubId] = useState(null);
   const [searchCategory, setSearchCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
-  const searchCategoryWidth = Math.min(
-    180,
-    Math.max(84, searchCategory.length * 9 + 54)
-  );
 
   useEffect(() => {
     const updateWishlistCount = () => {
@@ -162,28 +183,32 @@ export default function Navbar() {
   useEffect(() => {
     if (typeof window === "undefined" || categories.length === 0) return;
 
-    if (pathname === "/") {
-      setActiveCategoryId(null);
-      setPreviewCategoryId(null);
-      return;
-    }
+    const timer = window.setTimeout(() => {
+      if (pathname === "/") {
+        setActiveCategoryId(null);
+        setPreviewCategoryId(null);
+        return;
+      }
 
-    const categoryName = searchParams.get("category");
-    if (!categoryName) {
-      setActiveCategoryId(null);
-      setPreviewCategoryId(null);
-      setSearchCategory("All");
-      return;
-    }
+      const categoryName = searchParams.get("category");
+      if (!categoryName) {
+        setActiveCategoryId(null);
+        setPreviewCategoryId(null);
+        setSearchCategory("All");
+        return;
+      }
 
-    const matchedCategory = categories.find(
-      (cat) => cat.name?.toLowerCase() === categoryName.toLowerCase()
-    );
-    if (matchedCategory) {
-      setActiveCategoryId(matchedCategory._id);
-      setPreviewCategoryId(null);
-      setSearchCategory(matchedCategory.name);
-    }
+      const matchedCategory = categories.find(
+        (cat) => cat.name?.toLowerCase() === categoryName.toLowerCase()
+      );
+      if (matchedCategory) {
+        setActiveCategoryId(matchedCategory._id);
+        setPreviewCategoryId(null);
+        setSearchCategory(matchedCategory.name);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [pathname, categories, searchParams]);
 
   const visibleCategoryId = previewCategoryId || activeCategoryId;
@@ -199,10 +224,94 @@ export default function Navbar() {
 
   const [userForm, setUserForm] = useState({ email: "", password: "" });
 
+  const resetVendorOtpFlow = () => {
+    setVendorStep("email");
+    setVendorEmail("");
+    setVendorOtp("");
+    setVendorOtpLoading(false);
+    setOtpSent(false);
+  };
+
+  const openVendorModal = () => {
+    resetVendorOtpFlow();
+    setVendorForm((prev) => ({ ...prev, email: "" }));
+    setVendorModalOpen(true);
+  };
+
+  const closeVendorModal = () => {
+    setVendorModalOpen(false);
+    resetVendorOtpFlow();
+  };
+
   const handleVendorChange = (e) =>
     setVendorForm({ ...vendorForm, [e.target.name]: e.target.value });
   const handleUserChange = (e) =>
     setUserForm({ ...userForm, [e.target.name]: e.target.value });
+
+  // Step 1: send OTP (email field stays, OTP field appears below it)
+  const handleSendVendorOtp = async (e) => {
+    e.preventDefault();
+    const email = vendorEmail.trim();
+
+    if (!email) {
+      alert("Please enter email.");
+      return;
+    }
+
+    try {
+      setVendorOtpLoading(true);
+      await sendVendorOtp(email);
+      setOtpSent(true);
+      alert("OTP sent to your email.");
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to send OTP. Please try again.");
+    } finally {
+      setVendorOtpLoading(false);
+    }
+  };
+
+  // Step 2: verify OTP (same form, submits this once otpSent is true)
+  const handleVerifyVendorOtp = async (e) => {
+    e.preventDefault();
+    const email = vendorEmail.trim();
+    const otp = vendorOtp.trim();
+
+    if (!otp) {
+      alert("Please enter OTP.");
+      return;
+    }
+
+    try {
+      setVendorOtpLoading(true);
+      await verifyVendorOtp({ email, otp });
+      setVendorForm((prev) => ({ ...prev, email }));
+      setVendorStep("form");
+      alert("Email verified successfully.");
+    } catch (error) {
+      alert(error.response?.data?.message || "Invalid OTP");
+    } finally {
+      setVendorOtpLoading(false);
+    }
+  };
+
+  const handleResendVendorOtp = async () => {
+    const email = vendorEmail.trim();
+
+    if (!email) {
+      alert("Please enter email.");
+      return;
+    }
+
+    try {
+      setVendorOtpLoading(true);
+      await resendVendorOtp(email);
+      alert("OTP resent to your email.");
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to resend OTP");
+    } finally {
+      setVendorOtpLoading(false);
+    }
+  };
 
   const handleUserLogin = async (e) => {
     e.preventDefault();
@@ -243,7 +352,7 @@ export default function Navbar() {
         companyname: "", category: "", city: "", state: "",
         pincode: "", status: "inactive",
       });
-      setVendorModalOpen(false);
+      closeVendorModal();
     } catch (error) {
       alert(error.response?.data?.message || "Something went wrong");
     }
@@ -293,23 +402,25 @@ export default function Navbar() {
     router.push(`/shop${params.toString() ? `?${params.toString()}` : ""}`);
   };
 
-  const handleSearchCategoryChange = (event) => {
-    const nextCategory = event.target.value;
-    setSearchCategory(nextCategory);
+  const sendOtp = async () => {
+    try {
+      setWhatsappOtpLoading(true);
+      const res = await axios.post(WHATSAPP_OTP_API_URL, {
+        number: "7338694959",
+      });
 
-    const params = new URLSearchParams();
-    const trimmedQuery = searchQuery.trim();
+      if (res.data.success && res.data.whatsappUrl) {
+        const whatsappUrl = getSafeWhatsAppUrl(res.data.whatsappUrl);
+        window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
 
-    if (nextCategory !== "All") params.set("category", nextCategory);
-    if (trimmedQuery) params.set("search", trimmedQuery);
-
-    const matchedCategory = categories.find(
-      (cat) => cat.name?.toLowerCase() === nextCategory.toLowerCase()
-    );
-    setActiveCategoryId(matchedCategory?._id || null);
-    setPreviewCategoryId(null);
-
-    router.push(`/shop${params.toString() ? `?${params.toString()}` : ""}`);
+      alert(res.data.message || "WhatsApp OTP send nahi ho paya.");
+    } catch (error) {
+      alert(error.response?.data?.message || "WhatsApp OTP send nahi ho paya.");
+    } finally {
+      setWhatsappOtpLoading(false);
+    }
   };
 
   return (
@@ -372,47 +483,25 @@ export default function Navbar() {
         <div className="max-w-[1450px] mx-auto px-3 sm:px-4">
 
           {/* TOP BAR */}
-          <div className="h-[64px] min-h-[64px] sm:h-[70px] sm:min-h-[70px] flex items-center justify-between gap-2">
+          <div className="h-[64px] min-h-[64px] sm:h-[70px] sm:min-h-[70px] grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
             <Link href="/" className="font-black text-xl text-[#FF9900] tracking-tight">
               Jajot
             </Link>
 
-            <div className="hidden md:flex flex-1 max-w-[560px] mx-6">
+            <div className="hidden md:flex min-w-0 justify-center px-4">
               <form
                 onSubmit={handleSearchSubmit}
-                className="flex h-11 w-full overflow-hidden rounded-2xl border border-white/15 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-all duration-200 focus-within:border-[#FF9900] focus-within:ring-4 focus-within:ring-[#FF9900]/20"
+                className="flex h-10 w-full max-w-[720px] rounded-[5px] border-2 border-transparent bg-white shadow-[0_8px_24px_rgba(0,0,0,0.2)] transition-all duration-200 focus-within:border-[#FF9900]"
               >
-                <div
-                  style={{ width: `${searchCategoryWidth}px` }}
-                  className="relative shrink-0 border-r border-gray-200 bg-gray-50 transition hover:bg-gray-100"
-                >
-                  <select
-                    value={searchCategory}
-                    onChange={handleSearchCategoryChange}
-                    className="h-full w-full appearance-none bg-transparent pl-4 pr-10 text-sm font-semibold text-gray-800 outline-none"
-                    aria-label="Search category"
-                  >
-                    <option value="All">All</option>
-                    {categories.map((cat) => (
-                      <option key={cat._id || cat.name} value={cat.name}>
-                        {cat.name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown
-                    size={16}
-                    className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-700"
-                  />
-                </div>
                 <input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search Amazon.in"
-                  className="min-w-0 flex-1 bg-white px-4 text-sm font-medium text-gray-900 outline-none placeholder:font-normal placeholder:text-gray-500"
+                  placeholder="Search Jajot.com"
+                  className="min-w-0 flex-1 rounded-l-[3px] bg-white px-4 text-sm font-medium text-gray-900 outline-none placeholder:font-normal placeholder:text-gray-500"
                 />
                 <button
                   type="submit"
-                  className="flex w-14 items-center justify-center bg-[#FF9900] text-black transition hover:bg-[#f3a847] active:bg-[#e68a00]"
+                  className="flex w-12 shrink-0 items-center justify-center rounded-r-[3px] bg-[#febd69] text-[#111] transition hover:bg-[#f3a847] active:bg-[#e68a00]"
                   aria-label="Search"
                 >
                   <Search size={21} />
@@ -445,6 +534,16 @@ export default function Navbar() {
               >
                 <User size={18} />
               </button>
+              <button
+                type="button"
+                onClick={sendOtp}
+                disabled={whatsappOtpLoading}
+                aria-label="Send WhatsApp OTP"
+                title="Send WhatsApp OTP"
+                className="w-9 h-9 sm:w-10 sm:h-10 border border-emerald-400/40 rounded-xl flex items-center justify-center text-emerald-300 hover:border-emerald-300 hover:bg-emerald-400/10 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <MessageCircle size={18} />
+              </button>
               <Link
                 href="/Addtocard"
                 className="md:hidden h-9 sm:h-10 px-3 sm:px-4 bg-[#FF9900] rounded-xl flex items-center justify-center gap-2 text-black font-bold text-sm hover:bg-[#ca8f07] transition-colors"
@@ -453,7 +552,7 @@ export default function Navbar() {
               </Link>
               <div className="relative group hidden md:block">
                 <button
-                  onClick={() => setVendorModalOpen(true)}
+                  onClick={openVendorModal}
                   className="flex items-center gap-2 px-4 h-10 border border-[#FF9900]/40 text-[#FF9900] rounded-xl font-semibold text-sm hover:bg-[#FF9900]/10 transition-colors"
                 >
                   <Store size={18} />Vendor
@@ -752,7 +851,7 @@ export default function Navbar() {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => { setMobileOpen(false); setVendorModalOpen(true); }}
+                  onClick={() => { setMobileOpen(false); openVendorModal(); }}
                   className="flex-1 h-10 rounded-xl border border-[#FF9900]/40 flex items-center justify-center gap-2 text-[#FF9900] text-sm font-semibold hover:bg-[#FF9900]/10 transition-colors"
                 >
                   <Store size={16} /> Vendor
@@ -765,6 +864,18 @@ export default function Navbar() {
                   <ShoppingBag size={16} /> Cart
                 </Link>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileOpen(false);
+                  sendOtp();
+                }}
+                disabled={whatsappOtpLoading}
+                className="h-10 rounded-xl border border-emerald-400/40 flex items-center justify-center gap-2 text-emerald-300 text-sm font-semibold hover:bg-emerald-400/10 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <MessageCircle size={16} />
+                {whatsappOtpLoading ? "Sending..." : "WhatsApp OTP"}
+              </button>
             </div>
           </div>
           <div className="flex-1" onClick={() => setMobileOpen(false)} />
@@ -777,7 +888,7 @@ export default function Navbar() {
         categories={categories}
         subCategories={subCategories}
         subToSubCategories={subToSubCategories}
-        onVendorClick={() => setVendorModalOpen(true)}
+        onVendorClick={openVendorModal}
       />
 
       {/* VENDOR MODAL */}
@@ -785,10 +896,12 @@ export default function Navbar() {
         createPortal(
           <div
             className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
-            onClick={() => setVendorModalOpen(false)}
+            onClick={closeVendorModal}
           >
             <div
-              className="bg-white rounded-xl w-full max-w-[720px] max-h-[90vh] shadow-2xl overflow-hidden"
+              className={`bg-white rounded-xl w-full ${
+                vendorStep === "form" ? "max-w-[720px]" : "max-w-[520px]"
+              } max-h-[90vh] shadow-2xl overflow-hidden`}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="bg-[#1e2a3a] px-7 py-5 flex items-start justify-between">
@@ -798,69 +911,162 @@ export default function Navbar() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setVendorModalOpen(false)}
+                  onClick={closeVendorModal}
                   className="text-gray-400 hover:text-white transition mt-1"
                 >
                   <X size={20} />
                 </button>
               </div>
-              <form
-                onSubmit={handleCreateVendor}
-                className="px-4 sm:px-7 py-5 sm:py-8 overflow-y-auto max-h-[calc(90vh-90px)]"
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                  {[
-                    { label: "Name", name: "name", type: "text", placeholder: "Enter name" },
-                    { label: "Email", name: "email", type: "email", placeholder: "Enter email" },
-                    { label: "Mobile Number", name: "number", type: "text", placeholder: "Enter mobile number" },
-                    { label: "Password", name: "password", type: "password", placeholder: "Enter password" },
-                    { label: "Company Name", name: "companyname", type: "text", placeholder: "Enter company name" },
-                    { label: "Category", name: "category", type: "text", placeholder: "Enter category" },
-                    { label: "City", name: "city", type: "text", placeholder: "Enter city" },
-                    { label: "State", name: "state", type: "text", placeholder: "Enter state" },
-                  ].map((field) => (
-                    <div key={field.name}>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {field.label}
-                      </label>
+
+              {/* STEP 1: Email + OTP together in one form */}
+              {vendorStep === "email" && (
+                <form
+                  onSubmit={otpSent ? handleVerifyVendorOtp : handleSendVendorOtp}
+                  className="px-4 sm:px-7 py-5 sm:py-8"
+                >
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={vendorEmail}
+                    onChange={(e) => setVendorEmail(e.target.value)}
+                    placeholder="Enter vendor email"
+                    disabled={otpSent}
+                    className={`w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623] ${
+                      otpSent ? "bg-gray-100 cursor-not-allowed" : ""
+                    }`}
+                    required
+                  />
+
+                  {otpSent && (
+                    <div className="mt-5">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          OTP
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleResendVendorOtp}
+                          disabled={vendorOtpLoading}
+                          className="text-xs font-semibold text-[#F5A623] hover:underline disabled:opacity-60"
+                        >
+                          Resend OTP
+                        </button>
+                      </div>
                       <input
-                        type={field.type}
-                        name={field.name}
-                        value={vendorForm[field.name]}
+                        type="text"
+                        value={vendorOtp}
+                        onChange={(e) => setVendorOtp(e.target.value)}
+                        placeholder="Enter OTP"
+                        className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
+                        required
+                      />
+                      <p className="text-xs text-gray-500 mt-2">
+                        OTP sent to <span className="font-semibold">{vendorEmail}</span>
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-100">
+                    <button
+                      type="button"
+                      onClick={closeVendorModal}
+                      className="px-6 h-11 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50 transition"
+                    >
+                      Cancel
+                    </button>
+                    {otpSent && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOtpSent(false);
+                          setVendorOtp("");
+                        }}
+                        className="px-6 h-11 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50 transition"
+                      >
+                        Change Email
+                      </button>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={vendorOtpLoading}
+                      className="px-6 h-11 rounded-lg bg-[#F5A623] hover:bg-[#e09610] text-white text-sm font-semibold flex items-center gap-2 transition disabled:opacity-60"
+                    >
+                      {vendorOtpLoading
+                        ? otpSent
+                          ? "Verifying..."
+                          : "Sending..."
+                        : otpSent
+                        ? "Verify OTP"
+                        : "Send OTP"}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {vendorStep === "form" && (
+                <form
+                  onSubmit={handleCreateVendor}
+                  className="px-4 sm:px-7 py-5 sm:py-8 overflow-y-auto max-h-[calc(90vh-90px)]"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                    {[
+                      { label: "Name", name: "name", type: "text", placeholder: "Enter name" },
+                      { label: "Email", name: "email", type: "email", placeholder: "Enter email" },
+                      { label: "Mobile Number", name: "number", type: "text", placeholder: "Enter mobile number" },
+                      { label: "Password", name: "password", type: "password", placeholder: "Enter password" },
+                      { label: "Company Name", name: "companyname", type: "text", placeholder: "Enter company name" },
+                      { label: "Category", name: "category", type: "text", placeholder: "Enter category" },
+                      { label: "City", name: "city", type: "text", placeholder: "Enter city" },
+                      { label: "State", name: "state", type: "text", placeholder: "Enter state" },
+                    ].map((field) => (
+                      <div key={field.name}>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          {field.label}
+                        </label>
+                        <input
+                          type={field.type}
+                          name={field.name}
+                          value={vendorForm[field.name]}
+                          onChange={handleVendorChange}
+                          placeholder={field.placeholder}
+                          readOnly={field.name === "email"}
+                          className={`w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623] ${
+                            field.name === "email" ? "bg-gray-100 cursor-not-allowed" : ""
+                          }`}
+                        />
+                      </div>
+                    ))}
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Pincode</label>
+                      <input
+                        type="text"
+                        name="pincode"
+                        value={vendorForm.pincode}
                         onChange={handleVendorChange}
-                        placeholder={field.placeholder}
+                        placeholder="Enter pincode"
                         className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
                       />
                     </div>
-                  ))}
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Pincode</label>
-                    <input
-                      type="text"
-                      name="pincode"
-                      value={vendorForm.pincode}
-                      onChange={handleVendorChange}
-                      placeholder="Enter pincode"
-                      className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
-                    />
                   </div>
-                </div>
-                <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-100">
-                  <button
-                    type="button"
-                    onClick={() => setVendorModalOpen(false)}
-                    className="px-6 h-11 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50 transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-6 h-11 rounded-lg bg-[#F5A623] hover:bg-[#e09610] text-white text-sm font-semibold flex items-center gap-2 transition"
-                  >
-                    <Store size={16} /> Create Vendor
-                  </button>
-                </div>
-              </form>
+                  <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-100">
+                    <button
+                      type="button"
+                      onClick={closeVendorModal}
+                      className="px-6 h-11 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50 transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-6 h-11 rounded-lg bg-[#F5A623] hover:bg-[#e09610] text-white text-sm font-semibold flex items-center gap-2 transition"
+                    >
+                      <Store size={16} /> Create Vendor
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>,
           document.body

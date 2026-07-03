@@ -1,7 +1,8 @@
-import "./globals.css";
 import { Suspense } from "react";
+import "./globals.css";
 import Navbar from "./component/navbar";
 import Footer from "./component/footer";
+import GoogleAuthProvider from "./provider/GoogleAuthProvider";
 
 export const metadata = {
   metadataBase: new URL("https://www.yourdomain.com"), // Replace with the deployed production domain.
@@ -13,13 +14,13 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body suppressHydrationWarning>
-        <Suspense fallback={null}>
-          <Navbar />
-        </Suspense>
-        <main>
-          {children}
-        </main>
-        <Footer />
+        <GoogleAuthProvider>
+          <Suspense fallback={null}>
+            <Navbar />
+          </Suspense>
+          <main>{children}</main>
+          <Footer />
+        </GoogleAuthProvider>
       </body>
     </html>
   );
