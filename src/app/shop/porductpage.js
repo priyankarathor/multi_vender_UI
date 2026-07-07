@@ -28,7 +28,7 @@ import {
 import { ProductGridSkeleton } from "../component/PageSkeleton";
 import FestiveOfferBanner from "./FestiveOfferBanner";
 
-/* ================= PRODUCTS (same as yours) ================= */
+/* ================= PRODUCTS (fallback only, used if API fails) ================= */
 const ALL_PRODUCTS = [
   // ================= ELECTRONICS =================
   {
@@ -401,6 +401,54 @@ const haveSameWishlistProducts = (first = [], second = []) => {
   );
 };
 
+/* =========================================================================
+   BUG FIX #1: Normalize every product coming from the API.
+   Real backends (Mongo/Mongoose especially) almost always send:
+     - `_id` instead of `id`
+     - `category` / `subcategory` as a POPULATED OBJECT ({ _id, name })
+       instead of a plain string
+     - `rating` sometimes missing entirely
+     - `image` sometimes under `images[0]` or `thumbnail`
+   The rest of this component was written assuming `id` (not `_id`),
+   `rating` always present, and `category` always a string/id.
+   Without this normalization step, products silently disappear from
+   filters, links break (`/ProductDetailpage/undefined`), and React keys
+   collide. This single function fixes all of that at the source.
+   ========================================================================= */
+const normalizeProduct = (item) => {
+  if (!item || typeof item !== "object") return item;
+
+  const id = item.id ?? item._id ?? item.productId ?? null;
+
+  return {
+    ...item,
+    id,
+    rating: typeof item.rating === "number" ? item.rating : Number(item.rating) || 0,
+    price: typeof item.price === "number" ? item.price : Number(item.price) || 0,
+    image:
+      item.image ||
+      item.thumbnail ||
+      (Array.isArray(item.images) ? item.images[0] : "") ||
+      "",
+  };
+};
+
+/* =========================================================================
+   BUG FIX #3: category / subcategory can arrive as either:
+     - a string (id or name)              e.g. "Electronics" or "64f0..."
+     - a populated object                 e.g. { _id: "64f0...", name: "Electronics" }
+   `getCategoryName` previously assumed it was always a string/id, which
+   crashed (or silently returned "[object Object]") whenever the backend
+   populated the reference. This safe version handles both shapes.
+   ========================================================================= */
+const extractName = (value, namesById) => {
+  if (!value) return "";
+  if (typeof value === "object") {
+    return value.name || value.category || value.title || "";
+  }
+  return namesById[value] || value;
+};
+
 /* ================= PAGE ================= */
 export default function ShopPage() {
   const searchParams = useSearchParams();
@@ -408,7 +456,7 @@ export default function ShopPage() {
   const subcategoryFromUrl = searchParams.get("subcategory") || "All";
   const searchFromUrl = searchParams.get("search") || "";
 
-  const [products, setProducts] = useState(ALL_PRODUCTS);
+  const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState("");
   const [categories, setCategories] = useState(["All"]);
@@ -435,18 +483,30 @@ export default function ShopPage() {
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setCurrentPage(1);
-      setFilters((prev) => ({
-        ...prev,
-        category: categoryFromUrl,
-        subcategory: subcategoryFromUrl,
-        subcategoryId: "",
-      }));
-    }, 0);
-
-    return () => window.clearTimeout(timer);
+    setCurrentPage(1);
+    setFilters((prev) => ({
+      ...prev,
+      category: categoryFromUrl,
+      subcategory: subcategoryFromUrl,
+      subcategoryId: "",
+    }));
   }, [categoryFromUrl, searchFromUrl, subcategoryFromUrl]);
+
+  const getCategoryName = useCallback(
+    (category) => extractName(category, categoryNamesById),
+    [categoryNamesById]
+  );
+
+  const getSubCategoryDisplayName = useCallback(
+    (subcategory) => extractName(subcategory, subCategoryNamesById),
+    [subCategoryNamesById]
+  );
+
+  const selectedCategory = filters.category || "All";
+  const activeCategoryId =
+    selectedCategory !== "All"
+      ? categoryIdsByName[selectedCategory.toLowerCase()] || null
+      : null;
 
   useEffect(() => {
     let active = true;
@@ -454,19 +514,49 @@ export default function ShopPage() {
     const loadProducts = async () => {
       try {
         setProductsLoading(true);
-        const apiProducts = await fetchProducts({
-          category: filters.category,
-          subcategory: filters.subcategory,
-          subcategoryId: filters.subcategoryId,
-        });
+        setProductsError("");
+
+        // BUGFIX: previously "All" was sent straight through as a literal
+        // filter value, which most backends can't match against any real
+        // category/subcategory name, so the API always returned an empty
+        // list and the code silently fell back to the hardcoded dummy data.
+        // Now we only include a filter key when the user actually picked one.
+        const apiFilters = {};
+
+        if (filters.category && filters.category !== "All") {
+          apiFilters.category = filters.category;
+          // send the id too, in case the backend expects categoryId instead of name
+          if (activeCategoryId) apiFilters.categoryId = activeCategoryId;
+        }
+
+        if (filters.subcategory && filters.subcategory !== "All") {
+          apiFilters.subcategory = filters.subcategory;
+        }
+
+        if (filters.subcategoryId) {
+          apiFilters.subcategoryId = filters.subcategoryId;
+        }
+
+        const res = await fetchProducts(apiFilters);
+        const rawProducts = getApiList(res?.data ?? res);
+
+        // BUGFIX #1: normalize _id -> id, missing rating -> 0, image fallback
+        const apiProducts = rawProducts.map(normalizeProduct);
+
         if (!active) return;
 
         if (apiProducts.length > 0) {
           setProducts(apiProducts);
-          setProductsError("");
+        } else {
+          // no products matched -> show empty state, don't silently
+          // swap in fake data (that was masking the real bug)
+          setProducts([]);
+          setProductsError("No products found from the server for this filter.");
         }
       } catch (error) {
         if (!active) return;
+        console.error("fetchProducts failed:", error);
+        setProducts(ALL_PRODUCTS.map(normalizeProduct));
         setProductsError("Live products could not load. Showing saved products.");
       } finally {
         if (active) setProductsLoading(false);
@@ -478,14 +568,13 @@ export default function ShopPage() {
     return () => {
       active = false;
     };
-  }, [filters.category, filters.subcategory, filters.subcategoryId]);
+  }, [filters.category, filters.subcategory, filters.subcategoryId, activeCategoryId]);
 
   useEffect(() => {
     const loadCategories = async () => {
       try {
         const res = await getCategories();
-        const rawCategories =
-          res.data?.categories || res.data?.data || res.data || [];
+        const rawCategories = getApiList(res?.data ?? res);
 
         const namesById = rawCategories.reduce((map, category) => {
           if (typeof category === "string") return map;
@@ -525,6 +614,7 @@ export default function ShopPage() {
         setCategoryIdsByName(idsByName);
         setCategories(["All", ...new Set(apiCategories)]);
       } catch (error) {
+        console.error("getCategories failed:", error);
         setCategories(["All"]);
       }
     };
@@ -536,7 +626,7 @@ export default function ShopPage() {
     const loadSubCategories = async () => {
       try {
         const res = await getSubCategories();
-        const list = getApiList(res.data);
+        const list = getApiList(res?.data ?? res);
         const namesById = list.reduce((map, subcategory) => {
           const id = subcategory?._id || subcategory?.id;
           const name = getSubCategoryName(subcategory);
@@ -551,6 +641,7 @@ export default function ShopPage() {
         setSubCategoryNamesById(namesById);
         setSubCategories(list);
       } catch (error) {
+        console.error("getSubCategories failed:", error);
         setSubCategoryNamesById({});
         setSubCategories([]);
       }
@@ -558,22 +649,6 @@ export default function ShopPage() {
 
     loadSubCategories();
   }, []);
-
-  const getCategoryName = useCallback(
-    (category) => categoryNamesById[category] || category,
-    [categoryNamesById]
-  );
-
-  const getSubCategoryDisplayName = useCallback(
-    (subcategory) => subCategoryNamesById[subcategory] || subcategory,
-    [subCategoryNamesById]
-  );
-
-  const selectedCategory = filters.category || "All";
-  const activeCategoryId =
-    selectedCategory !== "All"
-      ? categoryIdsByName[selectedCategory.toLowerCase()] || null
-      : null;
 
   const visibleSubCategories = useMemo(() => {
     if (selectedCategory === "All") return [];
@@ -593,7 +668,7 @@ export default function ShopPage() {
     });
   }, [activeCategoryId, categoryNamesById, selectedCategory, subCategories]);
 
-  /* ================= FILTER ================= */
+  /* ================= FILTER (client-side, on top of whatever API returned) ================= */
   const filtered = useMemo(() => {
     const searchTerm = searchFromUrl.trim().toLowerCase();
 
@@ -627,7 +702,11 @@ export default function ShopPage() {
           p.price <= 100000) ||
         (filters.price === "Above ₹100000" && p.price > 100000);
 
-      const rating = p.rating >= filters.rating;
+      // BUGFIX #2: p.rating can be `undefined` for products that never had
+      // a rating set. `undefined >= filters.rating` is ALWAYS false, which
+      // was silently hiding every such product from the grid even when no
+      // rating filter was active. Default to 0 so it's compared honestly.
+      const rating = (p.rating ?? 0) >= filters.rating;
 
       return cat && subcat && search && price && rating;
     });
@@ -894,7 +973,7 @@ export default function ShopPage() {
 
       {/* ================= MAIN ================= */}
       <div className="flex-1">
-<FestiveOfferBanner />
+        <FestiveOfferBanner />
         {/* TOP BAR */}
         <div className="sticky top-0 z-20 bg-white/80 backdrop-blur border-b px-4 py-3 flex justify-between items-center">
           <div>
@@ -933,6 +1012,10 @@ export default function ShopPage() {
         {/* PRODUCTS GRID */}
         {productsLoading ? (
           <ProductGridSkeleton count={8} />
+        ) : paginatedProducts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center text-zinc-500">
+            <p className="text-sm">No products found.</p>
+          </div>
         ) : (
           <div
             className={`grid auto-rows-fr gap-5 p-4 ${
@@ -1122,7 +1205,7 @@ export default function ShopPage() {
             </div>
           </div>
         )}
-      
+
       </div>
 
       {/* ================= MOBILE FILTER ================= */}
