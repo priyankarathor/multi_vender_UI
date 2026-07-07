@@ -4,7 +4,11 @@ import { getCartDeviceId } from "../cart/cart";
 
 const BASE_URL = "https://amazon-multi-vendor-3.onrender.com/api/wishlist";
 
-// helper: kisi bhi response shape se array nikaal leta hai (cart.js ke getApiCartList jaisa)
+// ==========================
+// HELPERS
+// ==========================
+
+// Normalizes different possible API response shapes into a plain array.
 const getWishlistList = (payload) => {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.data)) return payload.data;
@@ -14,27 +18,19 @@ const getWishlistList = (payload) => {
   return [];
 };
 
-// create new wishlist item
-// data: { cid, pid, divid, qty, variantId, venderid, offerDiscount }
-export const createWishlistItem = (data) => {
-  return axios.post(`${BASE_URL}/create`, data);
-};
-
-// get ALL wishlist items (admin/raw list, unrelated to a specific user)
-export const getWishlistItems = () => {
-  return axios.get(`${BASE_URL}/`);
-};
-
-export const getAllWishlistItems = getWishlistItems;
-
-// get single wishlist item by its _id
-export const getWishlistItem = (id) => {
-  return axios.get(`${BASE_URL}/${id}`);
-};
-
-// get all wishlist items for a guest device (divid) -- unchanged, still used directly in a few places
-export const getWishlistByDevice = (divid) => {
-  return axios.get(`${BASE_URL}/device/${divid}`);
+// Some backend endpoints return 404 when a customer/device simply has no
+// wishlist items yet, instead of 200 with an empty array. This treats a 404
+// as "no items" rather than a hard failure, and re-throws anything else.
+const fetchWishlistOrEmpty = async (url) => {
+  try {
+    const res = await axios.get(url);
+    return res;
+  } catch (err) {
+    if (err?.response?.status === 404) {
+      return { data: [] };
+    }
+    throw err;
+  }
 };
 
 const getWishlistProductId = (item) =>
@@ -57,6 +53,92 @@ const buildWishlistUpdatePayload = (
   offerDiscount: item?.offerDiscount || item?.discount || 0,
 });
 
+// ==========================
+// CREATE
+// ==========================
+
+// data: { cid, pid, divid, qty, variantId, venderid, offerDiscount }
+export const createWishlistItem = (data) => {
+  return axios.post(`${BASE_URL}/create`, data);
+};
+
+// ==========================
+// READ
+// ==========================
+
+// Get ALL wishlist items (raw/unfiltered list, not tied to a specific user).
+export const getWishlistItems = () => {
+  return axios.get(`${BASE_URL}/`);
+};
+
+export const getAllWishlistItems = getWishlistItems;
+
+// Get a single wishlist item by its _id.
+export const getWishlistItem = (id) => {
+  return axios.get(`${BASE_URL}/${id}`);
+};
+
+// Get all wishlist items for a guest device (divid).
+export const getWishlistByDevice = (divid) => {
+  return fetchWishlistOrEmpty(`${BASE_URL}/device/${divid}`);
+};
+
+// Get wishlist for a logged-in customer, falling back to the device id
+// if the customer has no items yet or the request fails.
+export const getWishlistByCidOrDevice = async ({
+  cid = getLoggedInCid(),
+  divid = getCartDeviceId(),
+} = {}) => {
+  if (cid) {
+    try {
+      const res = await fetchWishlistOrEmpty(`${BASE_URL}/customer/${cid}`);
+      const items = getWishlistList(res.data);
+
+      if (items.length > 0) {
+        console.log("getWishlistByCidOrDevice: fetched via cid ->", items.length, "items");
+        return res;
+      }
+
+      console.log("getWishlistByCidOrDevice: cid fetch returned 0 items, falling back to divid");
+    } catch (err) {
+      console.warn(
+        "getWishlistByCidOrDevice: /wishlist/customer failed, falling back to divid ->",
+        err?.response?.data || err?.message
+      );
+    }
+  }
+
+  const deviceRes = await fetchWishlistOrEmpty(`${BASE_URL}/device/${divid}`);
+  console.log(
+    "getWishlistByCidOrDevice: fetched via divid ->",
+    getWishlistList(deviceRes.data).length,
+    "items"
+  );
+  return deviceRes;
+};
+
+// ==========================
+// UPDATE
+// ==========================
+
+// e.g. quantity change
+export const updateWishlistItem = (id, data) => {
+  return axios.put(`${BASE_URL}/update/${id}`, data);
+};
+
+// ==========================
+// DELETE
+// ==========================
+
+export const deleteWishlistItem = (id) => {
+  return axios.delete(`${BASE_URL}/delete/${id}`);
+};
+
+// ==========================
+// SYNC (guest -> logged-in customer)
+// ==========================
+
+// Assigns a batch of wishlist items to the logged-in customer id.
 export const syncWishlistItemsToCustomer = async (items = [], cid = getLoggedInCid()) => {
   if (!cid) {
     console.warn("syncWishlistItemsToCustomer: cid missing, skipping sync");
@@ -98,6 +180,9 @@ export const syncWishlistItemsToCustomer = async (items = [], cid = getLoggedInC
   return results;
 };
 
+// Fetches the guest (device) wishlist and reassigns every item to the
+// logged-in customer. Falls back to the raw list endpoint if the
+// device-specific endpoint fails.
 export const syncDeviceWishlistToCustomer = async (cid = getLoggedInCid()) => {
   if (!cid) {
     console.warn("syncDeviceWishlistToCustomer: cid missing, aborting");
@@ -124,49 +209,4 @@ export const syncDeviceWishlistToCustomer = async (cid = getLoggedInCid()) => {
   }
 
   return syncWishlistItemsToCustomer(items, cid);
-};
-
-// 👇 NAYA: cart.js ke getCartItems jaisa hi pattern.
-// cid ho tho /wishlist/customer/:cid try karo; agar wo fail ho ya 0 items de,
-// automatically /wishlist/device/:divid pe fallback ho jata hai.
-export const getWishlistByCidOrDevice = async ({
-  cid = getLoggedInCid(),
-  divid = getCartDeviceId(),
-} = {}) => {
-  if (cid) {
-    try {
-      const res = await axios.get(`${BASE_URL}/customer/${cid}`);
-      const items = getWishlistList(res.data);
-
-      if (items.length > 0) {
-        console.log("getWishlistByCidOrDevice: fetched via cid ->", items.length, "items");
-        return res;
-      }
-
-      console.log("getWishlistByCidOrDevice: cid fetch returned 0 items, falling back to divid");
-    } catch (err) {
-      console.warn(
-        "getWishlistByCidOrDevice: /wishlist/customer failed, falling back to divid ->",
-        err?.response?.data || err?.message
-      );
-    }
-  }
-
-  const deviceRes = await axios.get(`${BASE_URL}/device/${divid}`);
-  console.log(
-    "getWishlistByCidOrDevice: fetched via divid ->",
-    getWishlistList(deviceRes.data).length,
-    "items"
-  );
-  return deviceRes;
-};
-
-// update wishlist item (e.g. qty change)
-export const updateWishlistItem = (id, data) => {
-  return axios.put(`${BASE_URL}/update/${id}`, data);
-};
-
-// remove wishlist item
-export const deleteWishlistItem = (id) => {
-  return axios.delete(`${BASE_URL}/delete/${id}`);
 };

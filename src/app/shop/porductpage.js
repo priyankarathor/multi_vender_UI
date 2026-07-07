@@ -18,6 +18,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { getCategories } from "../apis/category/category";
 import { getSubCategories } from "../apis/subcategory/subcategory";
 import { fetchProducts } from "../apis/products/products";
+import { getCartDeviceId } from "../apis/cart/cart";
+import { getLoggedInCid } from "../apis/customer/customer";
+import {
+  createWishlistItem,
+  deleteWishlistItem,
+  getWishlistByCidOrDevice,
+} from "../apis/wishlist/wishlist";
 import { ProductGridSkeleton } from "../component/PageSkeleton";
 import FestiveOfferBanner from "./FestiveOfferBanner";
 
@@ -367,6 +374,33 @@ const getApiList = (payload) => {
 const getSubCategoryName = (subcategory) =>
   subcategory?.name || subcategory?.subcategory || subcategory?.title || "";
 
+const getWishlistList = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.wishlist)) return payload.wishlist;
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.data?.data)) return payload.data.data;
+  return [];
+};
+
+const getWishlistProductId = (item) =>
+  item?.pid && typeof item.pid === "object"
+    ? item.pid._id
+    : item?.pid || item?.productId || null;
+
+const getLocalWishlistProductId = (item) =>
+  item?.id || getWishlistProductId(item);
+
+const haveSameWishlistProducts = (first = [], second = []) => {
+  const firstIds = first.map((item) => String(getLocalWishlistProductId(item))).sort();
+  const secondIds = second.map((item) => String(getLocalWishlistProductId(item))).sort();
+
+  return (
+    firstIds.length === secondIds.length &&
+    firstIds.every((id, index) => id === secondIds[index])
+  );
+};
+
 /* ================= PAGE ================= */
 export default function ShopPage() {
   const searchParams = useSearchParams();
@@ -624,6 +658,25 @@ export default function ShopPage() {
     window.dispatchEvent(new Event("wishlistUpdated"));
   }, [wishlistItems]);
 
+  useEffect(() => {
+    const syncWishlistFromStorage = () => {
+      const savedItems = JSON.parse(localStorage.getItem("wishlistItems") || "[]");
+      const nextItems = Array.isArray(savedItems) ? savedItems : [];
+
+      setWishlistItems((prev) =>
+        haveSameWishlistProducts(prev, nextItems) ? prev : nextItems
+      );
+    };
+
+    window.addEventListener("wishlistUpdated", syncWishlistFromStorage);
+    window.addEventListener("storage", syncWishlistFromStorage);
+
+    return () => {
+      window.removeEventListener("wishlistUpdated", syncWishlistFromStorage);
+      window.removeEventListener("storage", syncWishlistFromStorage);
+    };
+  }, []);
+
   const toggleWishlist = (product) => {
     setWishlistItems((prev) => {
       const exists = prev.some((item) => item.id === product.id);
@@ -645,6 +698,63 @@ export default function ShopPage() {
         },
       ];
     });
+  };
+
+  const syncWishlistWithBackend = async (product, shouldRemove) => {
+    const createBackendWishlistItem = (deviceId) =>
+      createWishlistItem({
+        cid: getLoggedInCid(),
+        pid: product.id,
+        divid: deviceId,
+        qty: 1,
+        variantId: product.variantId || product.defaultVariant?._id || null,
+        venderid: product.vendorId || product.venderid || null,
+        offerDiscount: product.discount || 0,
+      });
+
+    try {
+      const deviceId = getCartDeviceId();
+      const res = await getWishlistByCidOrDevice({
+        cid: getLoggedInCid(),
+        divid: deviceId,
+      });
+      const backendItems = getWishlistList(res?.data);
+      const existingItem = backendItems.find(
+        (item) => String(getWishlistProductId(item)) === String(product.id)
+      );
+
+      if (shouldRemove) {
+        if (existingItem?._id) {
+          await deleteWishlistItem(existingItem._id);
+          window.dispatchEvent(new Event("wishlistUpdated"));
+        }
+        return;
+      }
+
+      if (!existingItem) {
+        await createBackendWishlistItem(deviceId);
+        window.dispatchEvent(new Event("wishlistUpdated"));
+      }
+    } catch (error) {
+      if (!shouldRemove) {
+        try {
+          await createBackendWishlistItem(getCartDeviceId());
+          window.dispatchEvent(new Event("wishlistUpdated"));
+          return;
+        } catch (createError) {
+          console.error(
+            "Wishlist API failed",
+            createError?.response?.data?.message || createError.message
+          );
+          return;
+        }
+      }
+
+      console.error(
+        "Wishlist API failed",
+        error?.response?.data?.message || error.message
+      );
+    }
   };
 
   const updateFilters = (updater) => {
@@ -863,7 +973,11 @@ export default function ShopPage() {
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
+                        const isAlreadyLiked = wishlistItems.some(
+                          (item) => item.id === p.id
+                        );
                         toggleWishlist(p);
+                        syncWishlistWithBackend(p, isAlreadyLiked);
                       }}
                       className="absolute top-2 right-2 z-10 w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center hover:bg-[#FF9900] hover:text-black transition"
                       aria-label="Add to wishlist"

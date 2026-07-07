@@ -20,6 +20,11 @@ const getApiList = (payload) => {
   return [];
 };
 
+const getWishlistProductId = (item) =>
+  item?.pid && typeof item.pid === "object"
+    ? item.pid._id
+    : item?.pid || item?.productId || item?.id || null;
+
 export default function WishlistPage() {
   const [wishlistItems, setWishlistItems] = useState([]);
   const [wishlistReady, setWishlistReady] = useState(false);
@@ -47,7 +52,11 @@ export default function WishlistPage() {
   };
 
   useEffect(() => {
-    fetchWishlist();
+    const timer = window.setTimeout(() => {
+      fetchWishlist();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -74,10 +83,24 @@ export default function WishlistPage() {
   }, []);
 
   const removeFromWishlist = async (id) => {
+    const removedItem = wishlistItems.find((item) => item._id === id);
+    const removedProductId = getWishlistProductId(removedItem);
+
     setWishlistItems((prev) => prev.filter((item) => item._id !== id));
 
     try {
       await deleteWishlistItem(id);
+      const savedItems = JSON.parse(localStorage.getItem("wishlistItems") || "[]");
+      const nextItems = Array.isArray(savedItems)
+        ? removedProductId
+          ? savedItems.filter(
+              (item) => String(getWishlistProductId(item)) !== String(removedProductId)
+            )
+          : savedItems
+        : [];
+
+      localStorage.setItem("wishlistItems", JSON.stringify(nextItems));
+      window.dispatchEvent(new Event("wishlistUpdated"));
     } catch (error) {
       console.error("Failed to remove wishlist item", error);
       fetchWishlist();

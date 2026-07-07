@@ -10,7 +10,7 @@ import FestiveOfferBanner from "./FestiveOfferBanner";
 export default function ShopPage() {
   return (
     <Suspense fallback={<PageSkeleton type="grid" />}>
-      <ShopHero />  
+      {/* <ShopHero />   */}
       <ProductPage />
      <CategoryOfferStrip />
 

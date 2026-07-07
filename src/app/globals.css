@@ -53,3 +53,17 @@ body {
     background-position: -100% 0;
   }
 }
+
+.shop-hero-marquee {
+  animation: shop-hero-marquee 18s linear infinite;
+}
+
+@keyframes shop-hero-marquee {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}

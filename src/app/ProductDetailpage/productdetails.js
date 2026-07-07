@@ -23,7 +23,15 @@ import {
   getProductPrice,
   isValidProductImageUrl,
 } from "../apis/products/products";
-import { createCartItem, getCartDeviceId } from "../apis/cart/cart";
+import {
+  createCartItem,
+  getApiCartList,
+  getCartDeviceId,
+  getCartProductId,
+  getCartVariantId,
+  getDeviceCartItems,
+  updateCartItem,
+} from "../apis/cart/cart";
 import { getLoggedInCid } from "../apis/customer/customer";
 import {
   createWishlistItem,
@@ -96,6 +104,7 @@ export default function ProductDetailsPage({
   const [quantity, setQuantity] = useState(1);
   const [cartOpen, setCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState([]);
+  const [cartPreviewItems, setCartPreviewItems] = useState([]);
   const [addingToCart, setAddingToCart] = useState(false);
   const [wishlistItems, setWishlistItems] = useState([]);
   const [storageReady, setStorageReady] = useState(false);
@@ -209,9 +218,11 @@ export default function ProductDetailsPage({
     };
 
     loadWishlistFromBackend();
+    window.addEventListener("wishlistUpdated", loadWishlistFromBackend);
 
     return () => {
       active = false;
+      window.removeEventListener("wishlistUpdated", loadWishlistFromBackend);
     };
   }, []);
 
@@ -358,16 +369,84 @@ export default function ProductDetailsPage({
     if (openCart) setCartOpen(true);
 
     try {
-      await createCartItem({
-        cid: getLoggedInCid(),
-        pid: product.id,
-        divid: deviceId,
-        qty: safeQuantity,
-        variantId: selectedVariant?._id || null,
-        offerDiscount: discount || product.discount || 0,
+      let deviceCartItems = [];
+
+      try {
+        const deviceCartRes = await getDeviceCartItems();
+        deviceCartItems = getApiCartList(deviceCartRes.data);
+      } catch (deviceCartError) {
+        console.warn(
+          "Device cart fetch failed before add",
+          deviceCartError.response?.data?.message || deviceCartError.message
+        );
+      }
+
+      const existingApiItem = [...deviceCartItems].reverse().find((item) => {
+        const itemProductId = getCartProductId(item);
+        const itemVariantId = getCartVariantId(item);
+        const sameProduct = String(itemProductId) === String(product.id);
+        const sameVariant =
+          !selectedVariant?._id ||
+          !itemVariantId ||
+          String(itemVariantId) === String(selectedVariant._id);
+
+        return sameProduct && sameVariant;
       });
+
+      if (existingApiItem?._id) {
+        const nextQty =
+          (existingApiItem.qty || existingApiItem.quantity || 1) + safeQuantity;
+
+        await updateCartItem(existingApiItem._id, {
+          cid: getLoggedInCid(),
+          pid: product.id,
+          divid: existingApiItem.divid || existingApiItem.deviceId || deviceId,
+          qty: nextQty,
+          variantId: selectedVariant?._id || getCartVariantId(existingApiItem),
+          offerDiscount: discount || product.discount || 0,
+        });
+
+        setCartPreviewItems([{ ...existingApiItem, qty: nextQty, quantity: nextQty }]);
+      } else {
+        await createCartItem({
+          cid: getLoggedInCid(),
+          pid: product.id,
+          divid: deviceId,
+          vendorId: product.vendorId,
+          qty: safeQuantity,
+          variantId: selectedVariant?._id || null,
+          offerDiscount: discount || product.discount || 0,
+        });
+
+        try {
+          const refreshedCartRes = await getDeviceCartItems();
+          const refreshedCartItems = getApiCartList(refreshedCartRes.data);
+          const addedApiItem = [...refreshedCartItems].reverse().find((item) => {
+            const itemProductId = getCartProductId(item);
+            const itemVariantId = getCartVariantId(item);
+            const sameProduct = String(itemProductId) === String(product.id);
+            const sameVariant =
+              !selectedVariant?._id ||
+              !itemVariantId ||
+              String(itemVariantId) === String(selectedVariant._id);
+
+            return sameProduct && sameVariant;
+          });
+
+          setCartPreviewItems([addedApiItem || cartProduct]);
+        } catch (deviceCartError) {
+          console.error(
+            "Device cart fetch failed",
+            deviceCartError.response?.data?.message || deviceCartError.message
+          );
+          setCartPreviewItems([cartProduct]);
+        }
+      }
+
+      window.dispatchEvent(new Event("cartUpdated"));
       return true;
     } catch (err) {
+      setCartPreviewItems([cartProduct]);
       console.error(
         "Cart API failed",
         err.response?.data?.message || err.message
@@ -403,6 +482,7 @@ export default function ProductDetailsPage({
           prev.filter((item) => item._id !== existingItem._id)
         );
         await deleteWishlistItem(existingItem._id);
+        window.dispatchEvent(new Event("wishlistUpdated"));
       } else {
         const res = await createWishlistItem({
           cid: getLoggedInCid(),
@@ -418,6 +498,7 @@ export default function ProductDetailsPage({
         if (created) {
           setWishlistItems((prev) => [...prev, created]);
         }
+        window.dispatchEvent(new Event("wishlistUpdated"));
       }
     } catch (err) {
       console.error(
@@ -859,7 +940,7 @@ export default function ProductDetailsPage({
       <CartSidebar
         isOpen={cartOpen}
         onClose={() => setCartOpen(false)}
-        cartItems={cartItems}
+        cartItems={cartPreviewItems}
       />
     </>
   );

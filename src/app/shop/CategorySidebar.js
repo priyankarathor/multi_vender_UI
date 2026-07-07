@@ -4,8 +4,6 @@ import { useState } from "react";
 import { ChevronLeft, ChevronDown, Star } from "lucide-react";
 import Link from "next/link";
 
-const brands = ["Apple", "Samsung", "Nike", "Sony", "Adidas", "Puma"];
-
 // ===== CATEGORY TREE =====
 // apni categories isi structure me daal do - jitne levels chahiye utne nest kar sakte ho
 // leaf level pe array of strings honi chahiye (final clickable items)
@@ -50,9 +48,54 @@ const categoryTree = {
   },
 };
 
+const sidebarCategoryTree = {
+  Electronics: {
+    Accessories: [
+      "Blank Media Cases & Wallets",
+      "Camera & Photo Accessories",
+      "Car & Vehicle Electronics Accessories",
+      "Computer Accessories",
+      "Memory Cards",
+      "Mobile Accessories",
+      "Navigation Accessories",
+      "Portable Audio & Video Accessories",
+      "Radio Communication Accessories",
+      "Tablet Accessories",
+      "Telephone Accessories",
+    ],
+    "Cameras & Photography": [],
+    "Car & Vehicle Electronics": [],
+    "Computers & Accessories": [],
+    "GPS & Accessories": [],
+    "Home Audio": [],
+    "Home Theater, TV & Video": [],
+    "Mobiles & Accessories": [
+      "Smartphones",
+      "Basic Phones",
+      "Mobile Cases",
+      "Chargers",
+      "Screen Protectors",
+      "Power Banks",
+    ],
+    "Portable Media Players": [],
+    Tablets: [],
+    "Telephones & Accessories": [],
+  },
+  Fashion: {
+    Men: ["T-Shirts", "Shirts", "Jeans", "Footwear"],
+    Women: ["Kurtis", "Dresses", "Sarees", "Footwear"],
+  },
+  "Home & Living": {
+    Furniture: ["Sofas", "Beds", "Tables"],
+    Decor: ["Wall Art", "Lighting", "Rugs"],
+  },
+};
+
+const DEFAULT_CATEGORY_PATH = ["Electronics"];
+
 export default function CategorySidebar({ onSelectCategory }) {
   // navigation path through the category tree, e.g. ["Electronics", "Mobiles & Accessories"]
-  const [path, setPath] = useState([]);
+  const [path, setPath] = useState(DEFAULT_CATEGORY_PATH);
 
   const [openSections, setOpenSections] = useState({
     rating: true,
@@ -71,15 +114,20 @@ export default function CategorySidebar({ onSelectCategory }) {
   // resolve current node based on path
   const currentNode = path.reduce(
     (node, key) => (node && typeof node === "object" ? node[key] : null),
-    categoryTree
+    sidebarCategoryTree
   );
 
   const isLeafList = Array.isArray(currentNode);
-  const childKeys = isLeafList ? [] : currentNode ? Object.keys(currentNode) : Object.keys(categoryTree);
+  const childKeys = isLeafList
+    ? []
+    : currentNode
+      ? Object.keys(currentNode)
+      : Object.keys(sidebarCategoryTree);
+  const breadcrumbs = path.slice(0, -1);
+  const currentTitle = path[path.length - 1];
 
   const goToLevel = (index) => {
-    // index = -1 means go to root
-    setPath((prev) => (index < 0 ? [] : prev.slice(0, index + 1)));
+    setPath((prev) => prev.slice(0, index + 1));
   };
 
   const enterChild = (key) => {
@@ -100,11 +148,11 @@ export default function CategorySidebar({ onSelectCategory }) {
 
           {/* BREADCRUMB TRAIL */}
           <div className="space-y-1 mb-2">
-            {path.map((key, i) => (
+            {breadcrumbs.map((key, i) => (
               <button
                 key={key}
-                onClick={() => goToLevel(i - 1)}
-                className="flex items-center gap-1 text-sm text-[#007185] hover:text-[#C7511F] hover:underline"
+                onClick={() => goToLevel(i)}
+                className="flex items-center text-sm text-black hover:text-[#C7511F] hover:underline"
                 style={{ paddingLeft: `${i * 10}px` }}
               >
                 <ChevronLeft className="w-3.5 h-3.5 shrink-0" />
@@ -117,40 +165,47 @@ export default function CategorySidebar({ onSelectCategory }) {
           {path.length > 0 && (
             <p
               className="text-sm font-bold text-black mb-2"
-              style={{ paddingLeft: `${path.length * 10}px` }}
+              style={{ paddingLeft: `${breadcrumbs.length * 12 + 12}px` }}
             >
-              {path[path.length - 1]}
+              {currentTitle}
             </p>
           )}
 
           {/* CHILDREN / LEAF ITEMS */}
-          <div className="space-y-1.5" style={{ paddingLeft: `${path.length * 10}px` }}>
+          <div className="space-y-1.5" style={{ paddingLeft: `${breadcrumbs.length * 12 + 24}px` }}>
             {isLeafList
               ? currentNode.map((item) => (
                   <Link
                     key={item}
                     href={`/shop?category=${encodeURIComponent(item)}`}
                     onClick={() => handleLeafClick(item)}
-                    className="block text-sm text-[#007185] hover:text-[#C7511F] hover:underline"
+                    className="block text-sm leading-5 text-black hover:text-[#C7511F] hover:underline"
                   >
                     {item}
                   </Link>
                 ))
               : childKeys.map((key) => {
-                  const child = (path.length === 0 ? categoryTree : currentNode)[key];
-                  const hasChildren = !Array.isArray(child);
+                  const child = currentNode ? currentNode[key] : sidebarCategoryTree[key];
+                  const hasChildren = !Array.isArray(child) || child.length > 0;
+
+                  if (!hasChildren) {
+                    return (
+                      <Link
+                        key={key}
+                        href={`/shop?category=${encodeURIComponent(key)}`}
+                        onClick={() => handleLeafClick(key)}
+                        className="block text-sm leading-5 text-black hover:text-[#C7511F] hover:underline"
+                      >
+                        {key}
+                      </Link>
+                    );
+                  }
 
                   return (
                     <button
                       key={key}
-                      onClick={() =>
-                        hasChildren
-                          ? enterChild(key)
-                          : handleLeafClick(key)
-                      }
-                      className={`block w-full text-left text-sm hover:text-[#C7511F] hover:underline ${
-                        path.length === 0 ? "font-semibold text-black" : "text-[#007185]"
-                      }`}
+                      onClick={() => enterChild(key)}
+                      className="block w-full text-left text-sm leading-5 text-black hover:text-[#C7511F] hover:underline"
                     >
                       {key}
                     </button>

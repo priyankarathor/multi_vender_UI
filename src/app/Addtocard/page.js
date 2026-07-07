@@ -6,7 +6,10 @@ import { userLogin } from "../apis/userlogin/userlogin";
 import { userRegister } from "../apis/userregister/userregister";
 import {
   buildCartUpdatePayload,
+  deleteCartItem,
+  getCartProductId,
   getCartItems,
+  getCartVariantId,
   syncDeviceCartToCustomer,
   updateCartItem,
 } from "../apis/cart/cart";
@@ -140,11 +143,43 @@ export default function CartPage() {
 
   const getQty = (item) => item.qty || 1;
 
+  const removeItemFromLocalCart = (item) => {
+    if (typeof window === "undefined") return;
+
+    const targetProductId = getCartProductId(item);
+    const targetVariantId = getCartVariantId(item);
+    const savedItems = JSON.parse(localStorage.getItem("cartItems") || "[]");
+
+    if (!Array.isArray(savedItems)) return;
+
+    const nextItems = savedItems.filter((savedItem) => {
+      const sameStoredId =
+        (item._id && savedItem._id === item._id) ||
+        (item.id && savedItem.id === item.id);
+      const savedProductId = getCartProductId(savedItem);
+      const savedVariantId = getCartVariantId(savedItem);
+      const sameProduct =
+        targetProductId &&
+        savedProductId &&
+        String(savedProductId) === String(targetProductId);
+      const sameVariant =
+        !targetVariantId ||
+        !savedVariantId ||
+        String(savedVariantId) === String(targetVariantId);
+
+      return !(sameStoredId || (sameProduct && sameVariant));
+    });
+
+    localStorage.setItem("cartItems", JSON.stringify(nextItems));
+    window.dispatchEvent(new Event("cartUpdated"));
+  };
+
   const syncCartQty = async (item, nextQty) => {
     if (!item?._id) return;
 
     try {
       await updateCartItem(item._id, buildCartUpdatePayload(item, getLoggedInCid(), nextQty));
+      window.dispatchEvent(new Event("cartUpdated"));
     } catch (error) {
       console.error("Failed to update cart qty", error);
     }
@@ -173,9 +208,20 @@ export default function CartPage() {
     syncCartQty(item, nextQty);
   };
 
-  const removeItem = (item) => {
+  const removeItem = async (item) => {
+    if (!item?._id) return;
+
     setCartItems((prev) => prev.filter((i) => i._id !== item._id));
     setSelectedItemIds((prev) => prev.filter((id) => id !== item._id));
+    removeItemFromLocalCart(item);
+
+    try {
+      await deleteCartItem(item._id);
+      window.dispatchEvent(new Event("cartUpdated"));
+    } catch (error) {
+      console.error("Failed to remove cart item", error);
+      fetchCart();
+    }
   };
 
   const toggleItemSelection = (itemId) => {
@@ -233,6 +279,8 @@ export default function CartPage() {
         syncDeviceCartToCustomer(cid),
         syncDeviceWishlistToCustomer(cid),
       ]);
+      window.dispatchEvent(new Event("cartUpdated"));
+      window.dispatchEvent(new Event("wishlistUpdated"));
       await fetchCart(cid); // 👈 naye cid ke saath cart turant refresh
 
       setLoginForm({ email: "", password: "" });
@@ -280,6 +328,8 @@ export default function CartPage() {
         syncDeviceCartToCustomer(cid),
         syncDeviceWishlistToCustomer(cid),
       ]);
+      window.dispatchEvent(new Event("cartUpdated"));
+      window.dispatchEvent(new Event("wishlistUpdated"));
       await fetchCart(cid); // 👈 naye cid ke saath cart turant refresh
 
       setRegisterModalOpen(false);

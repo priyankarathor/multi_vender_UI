@@ -2,10 +2,12 @@
 
 import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import axios from "axios";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { loginUser } from "../apis/login/login";
+import { GoogleLogin } from "@react-oauth/google";
+import { jwtDecode } from "jwt-decode";
+import { userLogin } from "../apis/userlogin/userlogin";
+import { userRegister } from "../apis/userregister/userregister";
 import {
   registerVendor,
   resendVendorOtp,
@@ -13,11 +15,19 @@ import {
   verifyVendorOtp,
 } from "../apis/register/register";
 import { saveCustomerSession } from "../apis/customer/customer";
-import { syncDeviceCartToCustomer } from "../apis/cart/cart";
-import { syncDeviceWishlistToCustomer } from "../apis/wishlist/wishlist";
+import {
+  getApiCartList,
+  getCartItems,
+  syncDeviceCartToCustomer,
+} from "../apis/cart/cart";
+import {
+  getWishlistByCidOrDevice,
+  syncDeviceWishlistToCustomer,
+} from "../apis/wishlist/wishlist";
 import { getCategories } from "../apis/category/category";
 import { getSubCategories } from "../apis/subcategory/subcategory";
 import { getSubToSubCategories } from "../apis/subtosubcategory/subtosubcategory";
+import { sendWhatsAppOtp } from "../apis/whatsapp/whatsapp";
 import AllCategoriesMenu from "./AllCategoriesMenu";
 
 import {
@@ -29,6 +39,7 @@ import {
   X,
   Store,
   ChevronRight,
+  ChevronDown,
   MessageCircle,
 } from "lucide-react";
 
@@ -42,8 +53,20 @@ const getApiList = (payload) => {
   return [];
 };
 
-const WHATSAPP_OTP_API_URL =
-  process.env.NEXT_PUBLIC_WHATSAPP_OTP_API_URL || "/api/send-whatsapp-otp";
+const getCountList = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.cart)) return payload.cart;
+  if (Array.isArray(payload?.wishlist)) return payload.wishlist;
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.data?.data)) return payload.data.data;
+  if (Array.isArray(payload?.data?.cart)) return payload.data.cart;
+  if (Array.isArray(payload?.data?.wishlist)) return payload.data.wishlist;
+  if (Array.isArray(payload?.data?.items)) return payload.data.items;
+  return [];
+};
+
+const getItemQty = (item) => Number(item?.qty || item?.quantity || 1);
 
 const getSafeWhatsAppUrl = (url) => {
   if (!url) return "";
@@ -55,10 +78,47 @@ const getSafeWhatsAppUrl = (url) => {
   }
 };
 
+const initialUserRegisterForm = {
+  name: "",
+  email: "",
+  number: "",
+  password: "",
+  status: "active",
+  role: "customer",
+  companyname: "",
+  category: "",
+  city: "",
+  state: "",
+  pincode: "",
+};
+
+const getStoredCustomer = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("checkoutUser");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const cust =
+      parsed?.data?.customer ||
+      parsed?.data?.user ||
+      parsed?.customer ||
+      parsed?.user ||
+      parsed?.data ||
+      parsed;
+    if (!cust?._id && !cust?.id) return null;
+    return cust;
+  } catch {
+    return null;
+  }
+};
+
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+  const hasGoogleClientId =
+    googleClientId && googleClientId !== "your_google_client_id_here";
   const [mobileOpen, setMobileOpen] = useState(false);
   const [allMenuOpen, setAllMenuOpen] = useState(false);
   const [vendorModalOpen, setVendorModalOpen] = useState(false);
@@ -69,7 +129,13 @@ export default function Navbar() {
   const [otpSent, setOtpSent] = useState(false);
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [wishlistCount, setWishlistCount] = useState(0);
+  const [cartCount, setCartCount] = useState(0);
   const [whatsappOtpLoading, setWhatsappOtpLoading] = useState(false);
+
+  // Logged-in customer + profile dropdown
+  const [customer, setCustomer] = useState(null);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const profileDropdownRef = useRef(null);
 
   const [vendorForm, setVendorForm] = useState({
     name: "",
@@ -97,52 +163,56 @@ export default function Navbar() {
   const [mobileExpandedSubId, setMobileExpandedSubId] = useState(null);
   const [searchCategory, setSearchCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const searchCategoryWidth = Math.min(
+    128,
+    Math.max(74, searchCategory.length * 7 + 48)
+  );
 
   useEffect(() => {
-    const updateWishlistCount = () => {
-      const savedItems = JSON.parse(localStorage.getItem("wishlistItems") || "[]");
-      const currentCount = Array.isArray(savedItems) ? savedItems.length : 0;
-      const seenCountRaw = localStorage.getItem("wishlistSeenCount");
+    let active = true;
 
-      if (seenCountRaw == null) {
-        localStorage.setItem("wishlistSeenCount", String(currentCount));
+    const updateCounts = async () => {
+      try {
+        const [cartRes, wishlistRes] = await Promise.allSettled([
+          getCartItems(),
+          getWishlistByCidOrDevice(),
+        ]);
+
+        if (!active) return;
+
+        if (cartRes.status === "fulfilled") {
+          const cartItems = getApiCartList(cartRes.value.data);
+          setCartCount(
+            cartItems.reduce((total, item) => total + getItemQty(item), 0)
+          );
+        } else {
+          setCartCount(0);
+        }
+
+        if (wishlistRes.status === "fulfilled") {
+          setWishlistCount(getCountList(wishlistRes.value.data).length);
+        } else {
+          setWishlistCount(0);
+        }
+      } catch {
+        if (!active) return;
+        setCartCount(0);
         setWishlistCount(0);
-        return;
       }
-
-      const seenCount = Number(seenCountRaw) || 0;
-      setWishlistCount(Math.max(0, currentCount - seenCount));
     };
 
-    updateWishlistCount();
-    window.addEventListener("wishlistUpdated", updateWishlistCount);
-    window.addEventListener("storage", updateWishlistCount);
+    updateCounts();
+    window.addEventListener("cartUpdated", updateCounts);
+    window.addEventListener("wishlistUpdated", updateCounts);
+    window.addEventListener("storage", updateCounts);
 
     return () => {
-      window.removeEventListener("wishlistUpdated", updateWishlistCount);
-      window.removeEventListener("storage", updateWishlistCount);
+      active = false;
+      window.removeEventListener("cartUpdated", updateCounts);
+      window.removeEventListener("wishlistUpdated", updateCounts);
+      window.removeEventListener("storage", updateCounts);
     };
   }, []);
-
-  useEffect(() => {
-    if (pathname !== "/Wishlist") return;
-
-    const timer = window.setTimeout(() => {
-      const savedItems = JSON.parse(localStorage.getItem("wishlistItems") || "[]");
-      const currentCount = Array.isArray(savedItems) ? savedItems.length : 0;
-      localStorage.setItem("wishlistSeenCount", String(currentCount));
-      setWishlistCount(0);
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, [pathname]);
-
-  const clearWishlistBadge = () => {
-    const savedItems = JSON.parse(localStorage.getItem("wishlistItems") || "[]");
-    const currentCount = Array.isArray(savedItems) ? savedItems.length : 0;
-    localStorage.setItem("wishlistSeenCount", String(currentCount));
-    setWishlistCount(0);
-  };
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -211,6 +281,31 @@ export default function Navbar() {
     return () => window.clearTimeout(timer);
   }, [pathname, categories, searchParams]);
 
+  // Load logged-in customer on mount + keep in sync across tabs/events
+  useEffect(() => {
+    setCustomer(getStoredCustomer());
+
+    const syncCustomer = () => setCustomer(getStoredCustomer());
+    window.addEventListener("customerUpdated", syncCustomer);
+    window.addEventListener("storage", syncCustomer);
+
+    const handleClickOutside = (e) => {
+      if (
+        profileDropdownRef.current &&
+        !profileDropdownRef.current.contains(e.target)
+      ) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      window.removeEventListener("customerUpdated", syncCustomer);
+      window.removeEventListener("storage", syncCustomer);
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   const visibleCategoryId = previewCategoryId || activeCategoryId;
 
   const filteredSubs = visibleCategoryId
@@ -223,6 +318,10 @@ export default function Navbar() {
     );
 
   const [userForm, setUserForm] = useState({ email: "", password: "" });
+  const [userLoginLoading, setUserLoginLoading] = useState(false);
+  const [userRegisterOpen, setUserRegisterOpen] = useState(false);
+  const [userRegisterLoading, setUserRegisterLoading] = useState(false);
+  const [userRegisterForm, setUserRegisterForm] = useState(initialUserRegisterForm);
 
   const resetVendorOtpFlow = () => {
     setVendorStep("email");
@@ -247,6 +346,11 @@ export default function Navbar() {
     setVendorForm({ ...vendorForm, [e.target.name]: e.target.value });
   const handleUserChange = (e) =>
     setUserForm({ ...userForm, [e.target.name]: e.target.value });
+  const handleUserRegisterChange = (e) =>
+    setUserRegisterForm({
+      ...userRegisterForm,
+      [e.target.name]: e.target.value,
+    });
 
   // Step 1: send OTP (email field stays, OTP field appears below it)
   const handleSendVendorOtp = async (e) => {
@@ -313,24 +417,122 @@ export default function Navbar() {
     }
   };
 
+  const syncCustomerData = async (cid) => {
+    try {
+      await Promise.all([
+        syncDeviceCartToCustomer(cid),
+        syncDeviceWishlistToCustomer(cid),
+      ]);
+      window.dispatchEvent(new Event("cartUpdated"));
+      window.dispatchEvent(new Event("wishlistUpdated"));
+    } catch (syncError) {
+      console.error("Cart/Wishlist cid sync failed", syncError);
+    }
+  };
+
+  const isNotRegisteredError = (message = "") => {
+    const msg = message.toLowerCase();
+    return (
+      msg.includes("not found") ||
+      msg.includes("not registered") ||
+      msg.includes("does not exist") ||
+      msg.includes("no user") ||
+      msg.includes("invalid email")
+    );
+  };
+
+  const openUserRegister = () => {
+    setUserRegisterForm((prev) => ({
+      ...prev,
+      email: userForm.email,
+      password: userForm.password,
+    }));
+    setUserModalOpen(false);
+    setUserRegisterOpen(true);
+  };
+
+  const openUserLogin = () => {
+    setUserForm((prev) => ({
+      ...prev,
+      email: userRegisterForm.email,
+      password: userRegisterForm.password,
+    }));
+    setUserRegisterOpen(false);
+    setUserModalOpen(true);
+  };
+
   const handleUserLogin = async (e) => {
     e.preventDefault();
+
     try {
-      const res = await loginUser(userForm);
+      setUserLoginLoading(true);
+      const res = await userLogin(userForm);
       const cid = saveCustomerSession(res.data);
-      try {
-        await Promise.all([
-          syncDeviceCartToCustomer(cid),
-          syncDeviceWishlistToCustomer(cid),
-        ]);
-      } catch (cartError) {
-        console.error("Cart/Wishlist cid sync failed", cartError);
-      }
+      localStorage.setItem("checkoutUser", JSON.stringify(res.data));
+      window.dispatchEvent(new Event("customerUpdated"));
+      await syncCustomerData(cid);
+
       alert("User Login Successfully!");
       setUserForm({ email: "", password: "" });
       setUserModalOpen(false);
     } catch (error) {
-      alert(error.response?.data?.message || "Something went wrong");
+      const message = error.response?.data?.message || "Login failed";
+
+      if (isNotRegisteredError(message)) {
+        openUserRegister();
+      } else {
+        alert(message);
+      }
+    } finally {
+      setUserLoginLoading(false);
+    }
+  };
+
+  const handleUserRegister = async (e) => {
+    e.preventDefault();
+
+    try {
+      setUserRegisterLoading(true);
+      const res = await userRegister(userRegisterForm);
+      const cid = saveCustomerSession(res.data);
+      localStorage.setItem("checkoutUser", JSON.stringify(res.data));
+      window.dispatchEvent(new Event("customerUpdated"));
+      await syncCustomerData(cid);
+
+      alert("Registration successful. You are logged in now.");
+      setUserRegisterForm(initialUserRegisterForm);
+      setUserRegisterOpen(false);
+    } catch (error) {
+      alert(error.response?.data?.message || "Registration failed");
+    } finally {
+      setUserRegisterLoading(false);
+    }
+  };
+
+  const handleGoogleUserLoginSuccess = (credentialResponse) => {
+    try {
+      const decoded = jwtDecode(credentialResponse.credential);
+
+      setUserForm((prev) => ({
+        ...prev,
+        email: decoded.email || prev.email,
+      }));
+    } catch (error) {
+      console.error("Google decode error (navbar login):", error);
+    }
+  };
+
+  const handleGoogleUserRegisterSuccess = (credentialResponse) => {
+    try {
+      const decoded = jwtDecode(credentialResponse.credential);
+
+      setUserRegisterForm((prev) => ({
+        ...prev,
+        name: decoded.name || prev.name,
+        email: decoded.email || prev.email,
+      }));
+    } catch (error) {
+      console.error("Google decode error (navbar register):", error);
     }
   };
 
@@ -402,12 +604,29 @@ export default function Navbar() {
     router.push(`/shop${params.toString() ? `?${params.toString()}` : ""}`);
   };
 
+  const handleSearchCategoryChange = (event) => {
+    const nextCategory = event.target.value;
+    setSearchCategory(nextCategory);
+
+    const params = new URLSearchParams();
+    const trimmedQuery = searchQuery.trim();
+
+    if (nextCategory !== "All") params.set("category", nextCategory);
+    if (trimmedQuery) params.set("search", trimmedQuery);
+
+    const matchedCategory = categories.find(
+      (cat) => cat.name?.toLowerCase() === nextCategory.toLowerCase()
+    );
+    setActiveCategoryId(matchedCategory?._id || null);
+    setPreviewCategoryId(null);
+
+    router.push(`/shop${params.toString() ? `?${params.toString()}` : ""}`);
+  };
+
   const sendOtp = async () => {
     try {
       setWhatsappOtpLoading(true);
-      const res = await axios.post(WHATSAPP_OTP_API_URL, {
-        number: "7338694959",
-      });
+      const res = await sendWhatsAppOtp("7338694959");
 
       if (res.data.success && res.data.whatsappUrl) {
         const whatsappUrl = getSafeWhatsAppUrl(res.data.whatsappUrl);
@@ -421,6 +640,16 @@ export default function Navbar() {
     } finally {
       setWhatsappOtpLoading(false);
     }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("checkoutUser");
+    setCustomer(null);
+    setProfileDropdownOpen(false);
+    window.dispatchEvent(new Event("customerUpdated"));
+    window.dispatchEvent(new Event("cartUpdated"));
+    window.dispatchEvent(new Event("wishlistUpdated"));
+    router.push("/");
   };
 
   return (
@@ -491,20 +720,42 @@ export default function Navbar() {
             <div className="hidden md:flex min-w-0 justify-center px-4">
               <form
                 onSubmit={handleSearchSubmit}
-                className="flex h-10 w-full max-w-[720px] rounded-[5px] border-2 border-transparent bg-white shadow-[0_8px_24px_rgba(0,0,0,0.2)] transition-all duration-200 focus-within:border-[#FF9900]"
+                className="flex h-10 w-full max-w-[520px] overflow-hidden rounded-[5px] border-2 border-transparent bg-white shadow-[0_8px_24px_rgba(0,0,0,0.2)] transition-all duration-200 focus-within:border-[#FF9900]"
               >
+                <div
+                  style={{ width: `${searchCategoryWidth}px` }}
+                  className="relative shrink-0 border-r border-gray-200 bg-gray-50 transition hover:bg-gray-100"
+                >
+                  <select
+                    value={searchCategory}
+                    onChange={handleSearchCategoryChange}
+                    className="h-full w-full appearance-none bg-transparent pl-3 pr-7 text-xs font-semibold text-gray-800 outline-none"
+                    aria-label="Search category"
+                  >
+                    <option value="All">All</option>
+                    {categories.map((cat) => (
+                      <option key={cat._id || cat.name} value={cat.name}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={14}
+                    className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-700"
+                  />
+                </div>
                 <input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Search Jajot.com"
-                  className="min-w-0 flex-1 rounded-l-[3px] bg-white px-4 text-sm font-medium text-gray-900 outline-none placeholder:font-normal placeholder:text-gray-500"
+                  className="min-w-0 flex-1 bg-white px-3 text-sm font-medium text-gray-900 outline-none placeholder:font-normal placeholder:text-gray-500"
                 />
                 <button
                   type="submit"
-                  className="flex w-12 shrink-0 items-center justify-center rounded-r-[3px] bg-[#febd69] text-[#111] transition hover:bg-[#f3a847] active:bg-[#e68a00]"
+                  className="flex w-11 shrink-0 items-center justify-center rounded-r-[3px] bg-[#febd69] text-[#111] transition hover:bg-[#f3a847] active:bg-[#e68a00]"
                   aria-label="Search"
                 >
-                  <Search size={21} />
+                  <Search size={20} />
                 </button>
               </form>
             </div>
@@ -518,7 +769,6 @@ export default function Navbar() {
               </button>
               <Link
                 href="/Wishlist"
-                onClick={clearWishlistBadge}
                 className="relative w-9 h-9 sm:w-10 sm:h-10 border border-white/10 rounded-xl flex items-center justify-center text-white hover:border-[#FF9900] hover:text-[#FF9900] transition-colors"
               >
                 <Heart size={18} />
@@ -528,12 +778,81 @@ export default function Navbar() {
                   </span>
                 )}
               </Link>
-              <button
-                onClick={() => setUserModalOpen(true)}
-                className="w-9 h-9 sm:w-10 sm:h-10 border border-white/10 rounded-xl flex items-center justify-center text-white hover:border-[#FF9900] hover:text-[#FF9900] transition-colors"
-              >
-                <User size={18} />
-              </button>
+
+              {/* PROFILE ICON + DROPDOWN */}
+              <div className="relative" ref={profileDropdownRef}>
+                <button
+                  onClick={() => setProfileDropdownOpen((prev) => !prev)}
+                  className="w-9 h-9 sm:w-10 sm:h-10 border border-white/10 rounded-xl flex items-center justify-center text-white hover:border-[#FF9900] hover:text-[#FF9900] transition-colors"
+                >
+                  <User size={18} />
+                </button>
+
+                {profileDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-100 z-[9999] overflow-hidden">
+                    {customer ? (
+                      <>
+                        <div className="px-4 py-3 border-b border-gray-100">
+                          <p className="font-bold text-gray-900 text-sm">
+                            Hello {customer.name || "there"}
+                          </p>
+                          {customer.number && (
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {customer.number}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="py-1">
+                          <Link
+                            href="/orders"
+                            onClick={() => setProfileDropdownOpen(false)}
+                            className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-[#FF9900] transition-colors"
+                          >
+                            Orders
+                          </Link>
+                          <Link
+                            href="/Wishlist"
+                            onClick={() => setProfileDropdownOpen(false)}
+                            className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-[#FF9900] transition-colors"
+                          >
+                            Wishlist
+                          </Link>
+                          <Link
+                            href="/contact"
+                            onClick={() => setProfileDropdownOpen(false)}
+                            className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-[#FF9900] transition-colors"
+                          >
+                            Contact Us
+                          </Link>
+                        </div>
+
+                        <div className="border-t border-gray-100 py-1">
+                          <button
+                            onClick={handleLogout}
+                            className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                          >
+                            Logout
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="py-1">
+                        <button
+                          onClick={() => {
+                            setProfileDropdownOpen(false);
+                            setUserModalOpen(true);
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 hover:text-[#FF9900] transition-colors flex items-center gap-2"
+                        >
+                          <User size={15} /> Login
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <button
                 type="button"
                 onClick={sendOtp}
@@ -546,9 +865,14 @@ export default function Navbar() {
               </button>
               <Link
                 href="/Addtocard"
-                className="md:hidden h-9 sm:h-10 px-3 sm:px-4 bg-[#FF9900] rounded-xl flex items-center justify-center gap-2 text-black font-bold text-sm hover:bg-[#ca8f07] transition-colors"
+                className="relative md:hidden h-9 sm:h-10 px-3 sm:px-4 bg-[#FF9900] rounded-xl flex items-center justify-center gap-2 text-black font-bold text-sm hover:bg-[#ca8f07] transition-colors"
               >
                 <ShoppingBag size={18} /><span>Cart</span>
+                {cartCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-white text-black text-[11px] font-bold flex items-center justify-center">
+                    {cartCount}
+                  </span>
+                )}
               </Link>
               <div className="relative group hidden md:block">
                 <button
@@ -618,9 +942,14 @@ export default function Navbar() {
             ))}
             <Link
               href="/Addtocard"
-              className="flex items-center gap-2 px-4 py-2 bg-[#FF9900] text-black rounded-xl font-semibold text-sm hover:bg-[#ca8f07] transition-colors whitespace-nowrap ml-auto"
+              className="relative flex items-center gap-2 px-4 py-2 bg-[#FF9900] text-black rounded-xl font-semibold text-sm hover:bg-[#ca8f07] transition-colors whitespace-nowrap ml-auto"
             >
               <ShoppingBag size={18} />Cart
+              {cartCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-white text-black text-[11px] font-bold flex items-center justify-center">
+                  {cartCount}
+                </span>
+              )}
             </Link>
           </div>
         </div>
@@ -835,20 +1164,49 @@ export default function Navbar() {
                 <Link
                   href="/Wishlist"
                   onClick={() => {
-                    clearWishlistBadge();
                     setMobileOpen(false);
                   }}
-                  className="flex-1 h-10 rounded-xl border border-white/10 flex items-center justify-center gap-2 text-white/80 text-sm hover:border-[#FF9900] hover:text-[#FF9900] transition-colors"
+                  className="relative flex-1 h-10 rounded-xl border border-white/10 flex items-center justify-center gap-2 text-white/80 text-sm hover:border-[#FF9900] hover:text-[#FF9900] transition-colors"
                 >
                   <Heart size={16} /> Wishlist
+                  {wishlistCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-[#FF9900] text-black text-[11px] font-bold flex items-center justify-center">
+                      {wishlistCount}
+                    </span>
+                  )}
                 </Link>
-                <button
-                  onClick={() => { setMobileOpen(false); setUserModalOpen(true); }}
-                  className="flex-1 h-10 rounded-xl border border-white/10 flex items-center justify-center gap-2 text-white/80 text-sm hover:border-[#FF9900] hover:text-[#FF9900] transition-colors"
-                >
-                  <User size={16} /> Account
-                </button>
+                {customer ? (
+                  <button
+                    onClick={() => { setMobileOpen(false); router.push("/orders"); }}
+                    className="flex-1 h-10 rounded-xl border border-white/10 flex items-center justify-center gap-2 text-white/80 text-sm hover:border-[#FF9900] hover:text-[#FF9900] transition-colors"
+                  >
+                    <User size={16} /> Orders
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { setMobileOpen(false); setUserModalOpen(true); }}
+                    className="flex-1 h-10 rounded-xl border border-white/10 flex items-center justify-center gap-2 text-white/80 text-sm hover:border-[#FF9900] hover:text-[#FF9900] transition-colors"
+                  >
+                    <User size={16} /> Account
+                  </button>
+                )}
               </div>
+
+              {customer && (
+                <div className="rounded-xl border border-white/10 px-3 py-2">
+                  <p className="text-xs text-white/50">Logged in as</p>
+                  <p className="text-sm text-white font-semibold truncate">
+                    {customer.name}
+                  </p>
+                  <button
+                    onClick={() => { setMobileOpen(false); handleLogout(); }}
+                    className="mt-2 text-xs font-semibold text-red-400 hover:text-red-300"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <button
                   onClick={() => { setMobileOpen(false); openVendorModal(); }}
@@ -859,9 +1217,14 @@ export default function Navbar() {
                 <Link
                   href="/Addtocard"
                   onClick={() => setMobileOpen(false)}
-                  className="flex-1 h-10 rounded-xl bg-[#FF9900] flex items-center justify-center gap-2 text-black text-sm font-semibold hover:bg-[#ca8f07] transition-colors"
+                  className="relative flex-1 h-10 rounded-xl bg-[#FF9900] flex items-center justify-center gap-2 text-black text-sm font-semibold hover:bg-[#ca8f07] transition-colors"
                 >
                   <ShoppingBag size={16} /> Cart
+                  {cartCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-white text-black text-[11px] font-bold flex items-center justify-center">
+                      {cartCount}
+                    </span>
+                  )}
                 </Link>
               </div>
               <button
@@ -1123,19 +1486,225 @@ export default function Navbar() {
                     />
                   </div>
                 </div>
+                <div className="mt-5">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="h-px flex-1 bg-gray-200" />
+                    <span className="text-xs text-gray-400">OR</span>
+                    <div className="h-px flex-1 bg-gray-200" />
+                  </div>
+
+                  <div className="flex justify-center">
+                    {hasGoogleClientId ? (
+                      <GoogleLogin
+                        onSuccess={handleGoogleUserLoginSuccess}
+                        onError={() => console.log("Google Login Failed")}
+                      />
+                    ) : (
+                      <p className="text-xs text-red-500">
+                        Add Google client id in root .env.local
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-4">
+                  New here?{" "}
+                  <button
+                    type="button"
+                    onClick={openUserRegister}
+                    className="text-[#F5A623] font-semibold hover:underline"
+                  >
+                    Create an account
+                  </button>
+                </p>
                 <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-100">
                   <button
                     type="button"
-                    onClick={() => setUserModalOpen(false)}
+                    onClick={openUserRegister}
                     className="px-6 h-11 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50 transition"
                   >
-                    Cancel
+                    Register
                   </button>
                   <button
                     type="submit"
-                    className="px-6 h-11 rounded-lg bg-[#F5A623] hover:bg-[#e09610] text-white text-sm font-semibold flex items-center gap-2 transition"
+                    disabled={userLoginLoading}
+                    className="px-6 h-11 rounded-lg bg-[#F5A623] hover:bg-[#e09610] text-white text-sm font-semibold flex items-center gap-2 transition disabled:opacity-60"
                   >
-                    <User size={16} /> Login
+                    <User size={16} /> {userLoginLoading ? "Logging in..." : "Login"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* USER REGISTER MODAL */}
+      {userRegisterOpen &&
+        createPortal(
+          <div
+            className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
+            onClick={() => setUserRegisterOpen(false)}
+          >
+            <div
+              className="bg-white rounded-xl w-full max-w-[480px] shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-[#1e2a3a] px-7 py-5 flex items-start justify-between">
+                <div>
+                  <h2 className="text-white text-xl font-bold">Create Account</h2>
+                  <p className="text-gray-400 text-sm mt-1">
+                    Register your user account to continue.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setUserRegisterOpen(false)}
+                  className="text-gray-400 hover:text-white transition mt-1"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <form onSubmit={handleUserRegister} className="px-5 sm:px-7 py-6 sm:py-8">
+                <div className="space-y-5">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={userRegisterForm.name}
+                      onChange={handleUserRegisterChange}
+                      placeholder="Enter full name"
+                      className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                    <input
+                      type="email"
+                      name="email"
+                      value={userRegisterForm.email}
+                      onChange={handleUserRegisterChange}
+                      placeholder="Enter email"
+                      className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Mobile Number</label>
+                    <input
+                      type="text"
+                      name="number"
+                      value={userRegisterForm.number}
+                      onChange={handleUserRegisterChange}
+                      placeholder="Enter mobile number"
+                      className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                    <input
+                      type="password"
+                      name="password"
+                      value={userRegisterForm.password}
+                      onChange={handleUserRegisterChange}
+                      placeholder="Enter password"
+                      className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+                      <input
+                        type="text"
+                        name="city"
+                        value={userRegisterForm.city}
+                        onChange={handleUserRegisterChange}
+                        placeholder="City"
+                        className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
+                      <input
+                        type="text"
+                        name="state"
+                        value={userRegisterForm.state}
+                        onChange={handleUserRegisterChange}
+                        placeholder="State"
+                        className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Pincode</label>
+                    <input
+                      type="text"
+                      name="pincode"
+                      value={userRegisterForm.pincode}
+                      onChange={handleUserRegisterChange}
+                      placeholder="Pincode"
+                      className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:border-[#F5A623] focus:ring-1 focus:ring-[#F5A623]"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-5">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="h-px flex-1 bg-gray-200" />
+                    <span className="text-xs text-gray-400">OR</span>
+                    <div className="h-px flex-1 bg-gray-200" />
+                  </div>
+
+                  <div className="flex justify-center">
+                    {hasGoogleClientId ? (
+                      <GoogleLogin
+                        onSuccess={handleGoogleUserRegisterSuccess}
+                        onError={() => console.log("Google Login Failed")}
+                      />
+                    ) : (
+                      <p className="text-xs text-red-500">
+                        Add Google client id in root .env.local
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-500 mt-4">
+                  Already have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={openUserLogin}
+                    className="text-[#F5A623] font-semibold hover:underline"
+                  >
+                    Login instead
+                  </button>
+                </p>
+
+                <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={openUserLogin}
+                    className="px-6 h-11 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50 transition"
+                  >
+                    Login
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={userRegisterLoading}
+                    className="px-6 h-11 rounded-lg bg-[#F5A623] hover:bg-[#e09610] text-white text-sm font-semibold flex items-center gap-2 transition disabled:opacity-60"
+                  >
+                    <User size={16} />
+                    {userRegisterLoading ? "Registering..." : "Register"}
                   </button>
                 </div>
               </form>
