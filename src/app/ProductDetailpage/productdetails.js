@@ -29,6 +29,7 @@ import {
   getCartDeviceId,
   getCartProductId,
   getCartVariantId,
+  getCartVendorId,
   getDeviceCartItems,
   updateCartItem,
 } from "../apis/cart/cart";
@@ -366,8 +367,6 @@ export default function ProductDetailsPage({
       return [...prev, cartProduct];
     });
 
-    if (openCart) setCartOpen(true);
-
     try {
       let deviceCartItems = [];
 
@@ -393,6 +392,11 @@ export default function ProductDetailsPage({
         return sameProduct && sameVariant;
       });
 
+      // Vendor id hamesha resolve karo -- pehle existing cart item se,
+      // warna product se (backend "venderid" field required hai, warna 500 aata hai)
+      const resolvedVendorId =
+        getCartVendorId(existingApiItem) || product.vendorId || product.venderid || null;
+
       if (existingApiItem?._id) {
         const nextQty =
           (existingApiItem.qty || existingApiItem.quantity || 1) + safeQuantity;
@@ -404,15 +408,17 @@ export default function ProductDetailsPage({
           qty: nextQty,
           variantId: selectedVariant?._id || getCartVariantId(existingApiItem),
           offerDiscount: discount || product.discount || 0,
+          vendorId: resolvedVendorId,
         });
 
         setCartPreviewItems([{ ...existingApiItem, qty: nextQty, quantity: nextQty }]);
+        if (openCart) setCartOpen(true);
       } else {
         await createCartItem({
           cid: getLoggedInCid(),
           pid: product.id,
           divid: deviceId,
-          vendorId: product.vendorId,
+          vendorId: resolvedVendorId,
           qty: safeQuantity,
           variantId: selectedVariant?._id || null,
           offerDiscount: discount || product.discount || 0,
@@ -441,6 +447,8 @@ export default function ProductDetailsPage({
           );
           setCartPreviewItems([cartProduct]);
         }
+
+        if (openCart) setCartOpen(true);
       }
 
       window.dispatchEvent(new Event("cartUpdated"));

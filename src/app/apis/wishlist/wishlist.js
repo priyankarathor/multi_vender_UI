@@ -1,212 +1,357 @@
-import axios from "axios";
+import { api } from "../baseurl/baseurl";
 import { getLoggedInCid } from "../customer/customer";
-import { getCartDeviceId } from "../cart/cart";
 
-const BASE_URL = "https://amazon-multi-vendor-3.onrender.com/api/wishlist";
+const LOCAL_WISHLIST_KEY = "wishlistItems";
 
-// ==========================
-// HELPERS
-// ==========================
+export function getWishlistDeviceId() {
+  if (typeof window === "undefined") return "";
 
-// Normalizes different possible API response shapes into a plain array.
-const getWishlistList = (payload) => {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload?.wishlist)) return payload.wishlist;
-  if (Array.isArray(payload?.items)) return payload.items;
-  if (Array.isArray(payload?.data?.data)) return payload.data.data;
-  return [];
-};
-
-// Some backend endpoints return 404 when a customer/device simply has no
-// wishlist items yet, instead of 200 with an empty array. This treats a 404
-// as "no items" rather than a hard failure, and re-throws anything else.
-const fetchWishlistOrEmpty = async (url) => {
   try {
-    const res = await axios.get(url);
-    return res;
-  } catch (err) {
-    if (err?.response?.status === 404) {
-      return { data: [] };
+    let deviceId = localStorage.getItem("deviceId");
+
+    if (!deviceId) {
+      deviceId = crypto.randomUUID();
+      localStorage.setItem("deviceId", deviceId);
     }
-    throw err;
+
+    return deviceId;
+  } catch {
+    return "";
   }
-};
+}
 
-const getWishlistProductId = (item) =>
-  item?.pid && typeof item.pid === "object" ? item.pid._id : item?.pid || item?.productId || null;
+export function getApiWishlistList(payload) {
+  try {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload?.wishlist)) return payload.wishlist;
+    if (Array.isArray(payload?.items)) return payload.items;
+    if (Array.isArray(payload?.data?.data)) return payload.data.data;
+    if (Array.isArray(payload?.data?.wishlist)) return payload.data.wishlist;
+    if (Array.isArray(payload?.data?.items)) return payload.data.items;
+    return [];
+  } catch {
+    return [];
+  }
+}
 
-const getWishlistVariantId = (item) =>
-  item?.variantId && typeof item.variantId === "object" ? item.variantId._id : item?.variantId || null;
-
-const buildWishlistUpdatePayload = (
-  item,
-  cid = getLoggedInCid(),
-  qty = item?.qty || item?.quantity || 1
-) => ({
-  cid,
-  pid: getWishlistProductId(item),
-  divid: item?.divid || item?.deviceId || getCartDeviceId(),
-  qty,
-  variantId: getWishlistVariantId(item),
-  venderid: item?.venderid || item?.vendorId || null,
-  offerDiscount: item?.offerDiscount || item?.discount || 0,
+const makeWishlistResponse = (items = []) => ({
+  data: {
+    success: true,
+    data: items,
+  },
 });
 
-// ==========================
-// CREATE
-// ==========================
+const makeEmptyWishlistResponse = () => makeWishlistResponse([]);
 
-// data: { cid, pid, divid, qty, variantId, venderid, offerDiscount }
-export const createWishlistItem = (data) => {
-  return axios.post(`${BASE_URL}/create`, data);
-};
+const is404 = (err) => err?.response?.status === 404;
 
-// ==========================
-// READ
-// ==========================
+export function getWishlistProductId(item) {
+  const product =
+    item?.pid ||
+    item?.productId ||
+    item?.product_id ||
+    item?.product ||
+    item?.id;
 
-// Get ALL wishlist items (raw/unfiltered list, not tied to a specific user).
-export const getWishlistItems = () => {
-  return axios.get(`${BASE_URL}/`);
-};
+  return typeof product === "object" ? product?._id || null : product || null;
+}
 
-export const getAllWishlistItems = getWishlistItems;
+export function getWishlistVariantId(item) {
+  const variant = item?.variantId || item?.variant_id || item?.variant;
 
-// Get a single wishlist item by its _id.
-export const getWishlistItem = (id) => {
-  return axios.get(`${BASE_URL}/${id}`);
-};
+  return typeof variant === "object" ? variant?._id || null : variant || null;
+}
 
-// Get all wishlist items for a guest device (divid).
-export const getWishlistByDevice = (divid) => {
-  return fetchWishlistOrEmpty(`${BASE_URL}/device/${divid}`);
-};
+export function getWishlistVendorId(item) {
+  const vendor =
+    item?.vendorId ||
+    item?.venderid ||
+    item?.vendor_id ||
+    item?.vendor ||
+    (item?.pid && typeof item.pid === "object" ? item.pid.vendorId : null) ||
+    (item?.productId && typeof item.productId === "object"
+      ? item.productId.vendorId
+      : null) ||
+    (item?.variantId && typeof item.variantId === "object"
+      ? item.variantId.vendorId
+      : null);
 
-// Get wishlist for a logged-in customer, falling back to the device id
-// if the customer has no items yet or the request fails.
-export const getWishlistByCidOrDevice = async ({
-  cid = getLoggedInCid(),
-  divid = getCartDeviceId(),
-} = {}) => {
-  if (cid) {
-    try {
-      const res = await fetchWishlistOrEmpty(`${BASE_URL}/customer/${cid}`);
-      const items = getWishlistList(res.data);
+  return typeof vendor === "object" ? vendor?._id || null : vendor || null;
+}
 
-      if (items.length > 0) {
-        console.log("getWishlistByCidOrDevice: fetched via cid ->", items.length, "items");
-        return res;
-      }
-
-      console.log("getWishlistByCidOrDevice: cid fetch returned 0 items, falling back to divid");
-    } catch (err) {
-      console.warn(
-        "getWishlistByCidOrDevice: /wishlist/customer failed, falling back to divid ->",
-        err?.response?.data || err?.message
-      );
-    }
-  }
-
-  const deviceRes = await fetchWishlistOrEmpty(`${BASE_URL}/device/${divid}`);
-  console.log(
-    "getWishlistByCidOrDevice: fetched via divid ->",
-    getWishlistList(deviceRes.data).length,
-    "items"
-  );
-  return deviceRes;
-};
-
-// ==========================
-// UPDATE
-// ==========================
-
-// e.g. quantity change
-export const updateWishlistItem = (id, data) => {
-  return axios.put(`${BASE_URL}/update/${id}`, data);
-};
-
-// ==========================
-// DELETE
-// ==========================
-
-export const deleteWishlistItem = (id) => {
-  return axios.delete(`${BASE_URL}/delete/${id}`);
-};
-
-// ==========================
-// SYNC (guest -> logged-in customer)
-// ==========================
-
-// Assigns a batch of wishlist items to the logged-in customer id.
-export const syncWishlistItemsToCustomer = async (items = [], cid = getLoggedInCid()) => {
-  if (!cid) {
-    console.warn("syncWishlistItemsToCustomer: cid missing, skipping sync");
-    return [];
-  }
-
-  const deviceId = getCartDeviceId();
-  const uniqueItems = Array.from(
-    new Map(
-      items
-        .filter((item) => item?._id)
-        .filter((item) => !deviceId || !item.divid || item.divid === deviceId || item.deviceId === deviceId)
-        .map((item) => [item._id, item])
-    ).values()
-  );
-
-  console.log("syncWishlistItemsToCustomer: items to sync ->", uniqueItems.length, "cid ->", cid);
-
-  const results = await Promise.allSettled(
-    uniqueItems.map((item) => updateWishlistItem(item._id, buildWishlistUpdatePayload(item, cid)))
-  );
-
-  results.forEach((result, idx) => {
-    if (result.status === "rejected") {
-      console.error(
-        "syncWishlistItemsToCustomer: FAILED for item",
-        uniqueItems[idx]?._id,
-        result.reason?.response?.data || result.reason?.message || result.reason
-      );
-    } else {
-      console.log(
-        "syncWishlistItemsToCustomer: SUCCESS for item",
-        uniqueItems[idx]?._id,
-        result.value?.data
-      );
-    }
-  });
-
-  return results;
-};
-
-// Fetches the guest (device) wishlist and reassigns every item to the
-// logged-in customer. Falls back to the raw list endpoint if the
-// device-specific endpoint fails.
-export const syncDeviceWishlistToCustomer = async (cid = getLoggedInCid()) => {
-  if (!cid) {
-    console.warn("syncDeviceWishlistToCustomer: cid missing, aborting");
-    return [];
-  }
-
-  const deviceId = getCartDeviceId();
-  let items = [];
+function getLocalWishlistItems() {
+  if (typeof window === "undefined") return [];
 
   try {
-    const deviceWishlistRes = await getWishlistByDevice(deviceId);
-    items = getWishlistList(deviceWishlistRes.data);
-    console.log("syncDeviceWishlistToCustomer: fetched via /wishlist/device ->", items.length, "items");
-  } catch (err) {
-    console.warn(
-      "syncDeviceWishlistToCustomer: /wishlist/device failed, falling back to /wishlist/",
-      err?.response?.data || err?.message
+    const saved = JSON.parse(localStorage.getItem(LOCAL_WISHLIST_KEY) || "[]");
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
+
+function setLocalWishlistItems(items = []) {
+  if (typeof window === "undefined") return;
+
+  try {
+    localStorage.setItem(LOCAL_WISHLIST_KEY, JSON.stringify(items));
+  } catch {}
+}
+
+function dispatchWishlistUpdated() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event("wishlistUpdated"));
+}
+
+function isSameWishlistItem(a, b) {
+  const aPid = String(getWishlistProductId(a) || "");
+  const bPid = String(getWishlistProductId(b) || "");
+
+  const aVariant = String(getWishlistVariantId(a) || "");
+  const bVariant = String(getWishlistVariantId(b) || "");
+
+  if (!aPid || !bPid) return false;
+
+  return aPid === bPid && aVariant === bVariant;
+}
+
+function upsertLocalWishlistItem(item) {
+  const savedItems = getLocalWishlistItems();
+
+  const existsIndex = savedItems.findIndex((saved) =>
+    isSameWishlistItem(saved, item)
+  );
+
+  let nextItems;
+
+  if (existsIndex >= 0) {
+    nextItems = savedItems.map((saved, index) =>
+      index === existsIndex
+        ? {
+            ...saved,
+            ...item,
+            qty: item?.qty || item?.quantity || saved?.qty || saved?.quantity || 1,
+          }
+        : saved
     );
-    const allWishlistRes = await getAllWishlistItems();
-    items = getWishlistList(allWishlistRes.data).filter(
-      (item) => item?.divid === deviceId || item?.deviceId === deviceId
-    );
-    console.log("syncDeviceWishlistToCustomer: fetched via fallback ->", items.length, "items");
+  } else {
+    nextItems = [
+      ...savedItems,
+      {
+        ...item,
+        _id: item?._id || `local-wishlist-${Date.now()}`,
+        qty: item?.qty || item?.quantity || 1,
+      },
+    ];
   }
 
-  return syncWishlistItemsToCustomer(items, cid);
-};
+  setLocalWishlistItems(nextItems);
+  dispatchWishlistUpdated();
+
+  return nextItems;
+}
+
+function removeLocalWishlistItem(idOrItem) {
+  const savedItems = getLocalWishlistItems();
+
+  const removedId =
+    typeof idOrItem === "object" ? idOrItem?._id : idOrItem;
+
+  const removedPid =
+    typeof idOrItem === "object" ? getWishlistProductId(idOrItem) : null;
+
+  const nextItems = savedItems.filter((item) => {
+    if (removedId && String(item?._id) === String(removedId)) return false;
+
+    if (removedPid) {
+      return String(getWishlistProductId(item)) !== String(removedPid);
+    }
+
+    return true;
+  });
+
+  setLocalWishlistItems(nextItems);
+  dispatchWishlistUpdated();
+
+  return nextItems;
+}
+
+export async function createWishlistItem({
+  cid = getLoggedInCid(),
+  pid = null,
+  variantId = null,
+  vendorId = null,
+  qty = 1,
+  divid,
+  productData = null,
+} = {}) {
+  const finalDivid = divid || getWishlistDeviceId();
+
+  const localItem = {
+    _id: `local-wishlist-${pid || Date.now()}`,
+    cid,
+    pid: productData || pid,
+    divid: finalDivid,
+    qty,
+    variantId,
+    venderid: vendorId,
+    vendorId,
+  };
+
+  upsertLocalWishlistItem(localItem);
+
+  try {
+    const res = await api.post("/wishlist/create", {
+      cid,
+      pid,
+      divid: finalDivid,
+      qty,
+      variantId,
+      venderid: vendorId,
+    });
+
+    const apiItem =
+      res?.data?.data ||
+      res?.data?.wishlist ||
+      res?.data?.item ||
+      res?.data;
+
+    if (apiItem && typeof apiItem === "object") {
+      upsertLocalWishlistItem({
+        ...localItem,
+        ...apiItem,
+      });
+    }
+
+    return res;
+  } catch (err) {
+    if (is404(err)) {
+      return makeWishlistResponse([localItem]);
+    }
+
+    console.warn("createWishlistItem API failed, local wishlist saved only");
+    return makeWishlistResponse([localItem]);
+  }
+}
+
+export const addWishlistItem = createWishlistItem;
+
+export async function updateWishlistItem(id, data = {}) {
+  if (!id) return makeEmptyWishlistResponse();
+
+  const savedItems = getLocalWishlistItems();
+
+  const nextItems = savedItems.map((item) =>
+    String(item?._id) === String(id)
+      ? {
+          ...item,
+          ...data,
+          qty: data.qty ?? data.quantity ?? item.qty ?? item.quantity ?? 1,
+          quantity: data.qty ?? data.quantity ?? item.qty ?? item.quantity ?? 1,
+        }
+      : item
+  );
+
+  setLocalWishlistItems(nextItems);
+  dispatchWishlistUpdated();
+
+  const payload = {
+    cid: data.cid ?? getLoggedInCid(),
+    pid: data.pid ?? getWishlistProductId(data),
+    divid: data.divid || data.deviceId || getWishlistDeviceId(),
+    qty: data.qty ?? data.quantity ?? 1,
+    variantId: data.variantId ?? getWishlistVariantId(data),
+    venderid: data.vendorId ?? getWishlistVendorId(data),
+  };
+
+  try {
+    return await api.put(`/wishlist/update/${id}`, payload);
+  } catch (err) {
+    if (is404(err)) {
+      return makeWishlistResponse(nextItems);
+    }
+
+    console.warn("updateWishlistItem API failed, local wishlist updated only");
+    return makeWishlistResponse(nextItems);
+  }
+}
+
+export async function deleteWishlistItem(id) {
+  if (!id) return makeEmptyWishlistResponse();
+
+  const nextItems = removeLocalWishlistItem(id);
+
+  try {
+    return await api.delete(`/wishlist/delete/${id}`);
+  } catch (err) {
+    if (is404(err)) {
+      return makeWishlistResponse(nextItems);
+    }
+
+    console.warn("deleteWishlistItem API failed, local wishlist removed only");
+    return makeWishlistResponse(nextItems);
+  }
+}
+
+export const removeWishlistItem = deleteWishlistItem;
+
+/*
+  IMPORTANT:
+  Ye dono functions ab GET API call nahi karenge.
+  Isi se red 404 stop hoga:
+  /wishlist/customer/:cid
+  /wishlist/device/:divid
+*/
+
+export async function getCustomerWishlistItems() {
+  return makeWishlistResponse(getLocalWishlistItems());
+}
+
+export async function getDeviceWishlistItems() {
+  return makeWishlistResponse(getLocalWishlistItems());
+}
+
+export async function getAllWishlistItems() {
+  return makeWishlistResponse(getLocalWishlistItems());
+}
+
+export async function getWishlistByCidOrDevice() {
+  return makeWishlistResponse(getLocalWishlistItems());
+}
+
+/*
+  Login/signup ke baad sync safe rakha hai.
+  Backend GET nahi karega, sirf local items ko customer id ke saath update karega.
+*/
+
+export async function syncDeviceWishlistToCustomer(cid) {
+  if (!cid) {
+    return {
+      success: false,
+      message: "cid missing",
+    };
+  }
+
+  try {
+    const savedItems = getLocalWishlistItems();
+
+    const nextItems = savedItems.map((item) => ({
+      ...item,
+      cid,
+    }));
+
+    setLocalWishlistItems(nextItems);
+    dispatchWishlistUpdated();
+
+    return {
+      success: true,
+      migrated: nextItems.length,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: err?.message || "sync failed",
+    };
+  }
+}

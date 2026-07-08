@@ -3,9 +3,19 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, ShoppingBag, Store, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { fetchNormalizedCartItems } from "../apis/cart/cart";
+import { fetchNormalizedCartItems, getCartDeviceId } from "../apis/cart/cart";
+import { getLoggedInCid } from "../apis/customer/customer";
 
 
+
+// User login hai ya nahi -- yehi pattern CartPage.js me bhi use hota hai
+function isUserLoggedIn() {
+  if (typeof window === "undefined") return false;
+
+  return Boolean(
+    localStorage.getItem("userToken") || localStorage.getItem("user")
+  );
+}
 
 export default function CartSidebar({ isOpen, onClose }) {
   const router = useRouter();
@@ -18,7 +28,12 @@ export default function CartSidebar({ isOpen, onClose }) {
     let active = true;
     setLoading(true);
 
-    fetchNormalizedCartItems()
+    // Condition: user login hai tho cid se data, warna divid se data.
+    const loggedIn = isUserLoggedIn();
+    const cid = loggedIn ? getLoggedInCid() : null;
+    const divid = loggedIn ? null : getCartDeviceId();
+
+    fetchNormalizedCartItems({ cid, divid })
       .then((items) => {
         if (active) setCartItems(items);
       })

@@ -3,97 +3,99 @@ import { getLoggedInCid } from "../customer/customer";
 
 export function getCartDeviceId() {
   if (typeof window === "undefined") return "";
-  const deviceId = localStorage.getItem("deviceId") || crypto.randomUUID();
-  localStorage.setItem("deviceId", deviceId);
-  return deviceId;
-}
 
-export function createCartItem({
-  cid = getLoggedInCid(),
-  pid = null,
-  qty = 1,
-  variantId = null,
-  offerDiscount = 0,
-  vendorId = null,
-  divid,
-} = {}) {
-  const finalDivid = divid || getCartDeviceId();
+  try {
+    let deviceId = localStorage.getItem("deviceId");
 
-  return api.post("/cart/create", {
-    cid,
-    pid,
-    divid: finalDivid,
-    qty,
-    variantId,
-    offerDiscount,
-    venderid: vendorId, // 👈 backend schema field ka naam "venderid" hai (typo), "vendorId" nahi
-  });
-}
+    if (!deviceId) {
+      deviceId = crypto.randomUUID();
+      localStorage.setItem("deviceId", deviceId);
+    }
 
-export function updateCartItem(id, data = {}) {
-  const resolvedVendorId = data.vendorId ?? getCartVendorId(data) ?? null;
-  const payload = {
-    cid: data.cid ?? getLoggedInCid(),
-    pid: data.pid ?? null,
-    divid: data.divid || getCartDeviceId(),
-    qty: data.qty ?? 1,
-    variantId: data.variantId ?? null,
-    offerDiscount: data.offerDiscount ?? 0,
-    venderid: resolvedVendorId, // 👈 yahan bhi backend field name match karna zaroori hai
-  };
-  return api.put(`/cart/update/${id}`, payload);
+    return deviceId;
+  } catch (err) {
+    console.warn("getCartDeviceId failed:", err?.message);
+    return "";
+  }
 }
-export function getDeviceCartItems() {
-  return api.get(`/cart/device/${getCartDeviceId()}`);
-}
-
-export function getAllCartItems() {
-  return api.get("/cart/");
-}
-export function deleteCartItem(id) {
-  return api.delete(`/cart/delete/${id}`);
-}
-
-
 
 export function getApiCartList(payload) {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload?.cart)) return payload.cart;
-  if (Array.isArray(payload?.items)) return payload.items;
-  if (Array.isArray(payload?.data?.data)) return payload.data.data;
-  if (Array.isArray(payload?.data?.cart)) return payload.data.cart;
-  if (Array.isArray(payload?.data?.items)) return payload.data.items;
-  return [];
+  try {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload?.cart)) return payload.cart;
+    if (Array.isArray(payload?.items)) return payload.items;
+    if (Array.isArray(payload?.data?.data)) return payload.data.data;
+    if (Array.isArray(payload?.data?.cart)) return payload.data.cart;
+    if (Array.isArray(payload?.data?.items)) return payload.data.items;
+    return [];
+  } catch {
+    return [];
+  }
 }
 
+const makeEmptyCartResponse = () => ({
+  data: {
+    success: true,
+    data: [],
+  },
+});
+
+const makeCartResponse = (items = []) => ({
+  data: {
+    success: true,
+    data: items,
+  },
+});
+
+const is404 = (err) => err?.response?.status === 404;
+
 export function getCartProductId(item) {
-  return item?.pid && typeof item.pid === "object" ? item.pid._id : item?.pid || item?.productId || null;
+  const product =
+    item?.pid ||
+    item?.productId ||
+    item?.product_id ||
+    item?.product ||
+    item?.id;
+
+  return typeof product === "object" ? product?._id || null : product || null;
 }
 
 export function getCartVariantId(item) {
-  return item?.variantId && typeof item.variantId === "object" ? item.variantId._id : item?.variantId || null;
+  const variant =
+    item?.variantId ||
+    item?.variant_id ||
+    item?.variant;
+
+  return typeof variant === "object" ? variant?._id || null : variant || null;
 }
 
-export function getCartProductKey(item) {
-  return getCartProductId(item) || getCartVariantId(item) || item?._id;
-}
-
-// 🆕 Ab vendorId seedha backend se populate hui product/variant object se
-// nikalte hain (product document mein "vendorId" field already hai),
-// koi localStorage mapping ki zaroorat nahi.
 export function getCartVendorId(item) {
   const vendor =
     item?.vendorId ||
     item?.venderid ||
+    item?.vendor_id ||
+    item?.vendor ||
     (item?.pid && typeof item.pid === "object" ? item.pid.vendorId : null) ||
-    (item?.variantId && typeof item.variantId === "object" ? item.variantId.vendorId : null) ||
-    null;
+    (item?.productId && typeof item.productId === "object"
+      ? item.productId.vendorId
+      : null) ||
+    (item?.variantId && typeof item.variantId === "object"
+      ? item.variantId.vendorId
+      : null);
 
-  return typeof vendor === "object" ? vendor?._id || null : vendor;
+  return typeof vendor === "object" ? vendor?._id || null : vendor || null;
 }
 
-export function buildCartUpdatePayload(item, cid = getLoggedInCid(), qty = item?.qty || item?.quantity || 1) {
+export function getCartProductKey(item) {
+  return getCartProductId(item) || getCartVariantId(item) || item?._id || null;
+}
+
+export function buildCartUpdatePayload(
+  item,
+  cid = getLoggedInCid(),
+  qty = item?.qty || item?.quantity || 1
+) {
   return {
     cid,
     pid: getCartProductId(item),
@@ -105,79 +107,228 @@ export function buildCartUpdatePayload(item, cid = getLoggedInCid(), qty = item?
   };
 }
 
-export async function getCartItems({ cid = getLoggedInCid(), divid = getCartDeviceId() } = {}) {
-  if (cid) {
-    try {
-      const res = await api.get(`/cart/customer/${cid}`);
-      const items = getApiCartList(res.data);
-      if (items.length > 0) return res;
-    } catch (err) {
-      console.warn("getCartItems: cid fetch failed, falling back to divid", err?.message);
-    }
-  }
-  return api.get(`/cart/device/${divid}`);
+export async function createCartItem({
+  cid = getLoggedInCid(),
+  pid = null,
+  qty = 1,
+  variantId = null,
+  offerDiscount = 0,
+  vendorId = null,
+  divid,
+} = {}) {
+  const finalDivid = divid || getCartDeviceId();
+
+  const payload = {
+    cid,
+    pid,
+    divid: finalDivid,
+    qty,
+    variantId,
+    offerDiscount,
+    venderid: vendorId, // backend field typo: venderid
+  };
+
+  return await api.post("/cart/create", payload);
 }
 
-export async function fetchNormalizedCartItems({ cid = getLoggedInCid(), divid = getCartDeviceId() } = {}) {
-  let items = [];
+export async function updateCartItem(id, data = {}) {
+  if (!id) {
+    return makeEmptyCartResponse();
+  }
+
+  const payload = {
+    cid: data.cid ?? getLoggedInCid(),
+    pid: data.pid ?? getCartProductId(data),
+    divid: data.divid || data.deviceId || getCartDeviceId(),
+    qty: data.qty ?? data.quantity ?? 1,
+    variantId: data.variantId ?? getCartVariantId(data),
+    offerDiscount: data.offerDiscount ?? data.discount ?? 0,
+    venderid: data.vendorId ?? getCartVendorId(data),
+  };
+
+  try {
+    return await api.put(`/cart/update/${id}`, payload);
+  } catch (err) {
+    if (is404(err)) {
+      return makeEmptyCartResponse();
+    }
+
+    console.error("updateCartItem failed:", id, err?.message);
+    throw err;
+  }
+}
+
+export async function deleteCartItem(id) {
+  if (!id) {
+    return makeEmptyCartResponse();
+  }
+
+  try {
+    return await api.delete(`/cart/delete/${id}`);
+  } catch (err) {
+    if (is404(err)) {
+      return makeEmptyCartResponse();
+    }
+
+    console.error("deleteCartItem failed:", id, err?.message);
+    throw err;
+  }
+}
+
+// Delete ke baad dobara get API mat call karo - isko use karo aur
+// apne local cart state (jo already fetchNormalizedCartItems se aaya tha)
+// se item hata do. Ex: setCartItems(prev => removeCartItemLocally(prev, deletedId))
+export function removeCartItemLocally(items = [], id) {
+  if (!Array.isArray(items) || !id) return items;
+  return items.filter((item) => item?._id !== id);
+}
+
+// Old function support
+export async function getAllCartItems() {
+  try {
+    return await api.get("/cart/");
+  } catch (err) {
+    if (is404(err)) {
+      return makeEmptyCartResponse();
+    }
+
+    return makeEmptyCartResponse();
+  }
+}
+
+// Customer id se cart
+export async function getCustomerCartItems(cid = getLoggedInCid()) {
+  if (!cid) {
+    return makeEmptyCartResponse();
+  }
+
+  try {
+    // cache-busting: same URL baar baar GET hoti hai, isliye kabhi kabhi
+    // browser/axios purana (empty/404) response cache karke serve kar deta
+    // tha - isliye add karne ke turant baad bhi purana khali cart dikhta tha.
+    return await api.get(`/cart/customer/${cid}`, {
+      params: { _t: Date.now() },
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    });
+  } catch (err) {
+    if (is404(err)) {
+      return makeEmptyCartResponse();
+    }
+
+    return makeEmptyCartResponse();
+  }
+}
+
+// Device id se cart
+export async function getDeviceCartItems(divid = getCartDeviceId()) {
+  if (!divid) {
+    return makeEmptyCartResponse();
+  }
+
+  try {
+    // cache-busting yahan bhi, same reason
+    return await api.get(`/cart/device/${divid}`, {
+      params: { _t: Date.now() },
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    });
+  } catch (err) {
+    if (is404(err)) {
+      return makeEmptyCartResponse();
+    }
+
+    return makeEmptyCartResponse();
+  }
+}
+
+// Main function Navbar/cart page ke liye
+// Condition: agar cid hai to SIRF cid wali API se data aayega.
+// Agar cid nahi hai tabhi divid wali API se data aayega.
+export async function getCartItems({
+  cid = getLoggedInCid(),
+  divid = getCartDeviceId(),
+} = {}) {
+  try {
+    if (cid) {
+      const customerRes = await getCustomerCartItems(cid);
+      const customerItems = getApiCartList(customerRes.data);
+      return makeCartResponse(customerItems);
+    }
+
+    if (divid) {
+      const deviceRes = await getDeviceCartItems(divid);
+      const deviceItems = getApiCartList(deviceRes.data);
+      return makeCartResponse(deviceItems);
+    }
+
+    return makeEmptyCartResponse();
+  } catch {
+    return makeEmptyCartResponse();
+  }
+}
+
+export async function fetchNormalizedCartItems({
+  cid = getLoggedInCid(),
+  divid = getCartDeviceId(),
+} = {}) {
   try {
     const res = await getCartItems({ cid, divid });
-    items = getApiCartList(res.data);
-  } catch (err) {
-    console.warn("fetchNormalizedCartItems: getCartItems failed, trying /cart/ directly", err?.message);
-    const allRes = await getAllCartItems();
-    items = getApiCartList(allRes.data).filter(
-      (item) => item?.divid === divid || item?.deviceId === divid || item?.cid === cid
-    );
-  }
+    const items = getApiCartList(res.data);
 
-  return items.map((item) => ({
-    ...item,
-    resolvedVendorId: getCartVendorId(item),
-  }));
+    return items.map((item) => ({
+      ...item,
+      resolvedVendorId: getCartVendorId(item),
+    }));
+  } catch {
+    return [];
+  }
 }
 
-// Login/signup ke baad device (divid) wala cart customer (cid) ke naam kar do.
-// Backend mein alag se koi "/cart/sync" route nahi hai, isliye existing
-// create/update/delete APIs se hi migrate karte hain.
-export async function syncDeviceCartToCustomer(cid, divid = getCartDeviceId()) {
-  if (!cid || !divid) return { success: false, message: "cid/divid missing" };
+// Login/signup ke baad device cart customer ke naam sync
+export async function syncDeviceCartToCustomer(
+  cid,
+  divid = getCartDeviceId()
+) {
+  if (!cid || !divid) {
+    return {
+      success: false,
+      message: "cid/divid missing",
+    };
+  }
 
   try {
-    // 1. Device wala cart uthao
-    const deviceRes = await api.get(`/cart/device/${divid}`);
+    const deviceRes = await getDeviceCartItems(divid);
     const deviceItems = getApiCartList(deviceRes.data);
 
     if (deviceItems.length === 0) {
-      return { success: true, migrated: 0 };
+      return {
+        success: true,
+        migrated: 0,
+      };
     }
 
-    // 2. Customer ka existing cart bhi uthao, taaki duplicate items merge ho sakein
-    let customerItems = [];
-    try {
-      const customerRes = await api.get(`/cart/customer/${cid}`);
-      customerItems = getApiCartList(customerRes.data);
-    } catch (err) {
-      console.warn("syncDeviceCartToCustomer: customer cart fetch failed", err?.message);
-    }
+    const customerRes = await getCustomerCartItems(cid);
+    const customerItems = getApiCartList(customerRes.data);
 
     const findMatchingCustomerItem = (item) => {
       const pid = getCartProductId(item);
       const variantId = getCartVariantId(item);
+
       return customerItems.find(
-        (ci) => getCartProductId(ci) === pid && getCartVariantId(ci) === variantId
+        (ci) =>
+          String(getCartProductId(ci)) === String(pid) &&
+          String(getCartVariantId(ci)) === String(variantId)
       );
     };
 
-    // 3. Har device item ko customer ke naam kar do
-    for (const item of deviceItems) {
-      const existing = findMatchingCustomerItem(item);
-      const qty = item?.qty || item?.quantity || 1;
-      const vendorId = getCartVendorId(item);
+    let migratedCount = 0;
 
+    for (const item of deviceItems) {
       try {
+        const existing = findMatchingCustomerItem(item);
+        const qty = item?.qty || item?.quantity || 1;
+        const vendorId = getCartVendorId(item);
+
         if (existing) {
-          // Already customer cart mein hai -> qty add kar do
           await updateCartItem(existing._id, {
             cid,
             pid: getCartProductId(existing),
@@ -188,7 +339,6 @@ export async function syncDeviceCartToCustomer(cid, divid = getCartDeviceId()) {
             vendorId: getCartVendorId(existing) || vendorId,
           });
         } else {
-          // Naya item customer ke naam bana do
           await createCartItem({
             cid,
             pid: getCartProductId(item),
@@ -200,18 +350,26 @@ export async function syncDeviceCartToCustomer(cid, divid = getCartDeviceId()) {
           });
         }
 
-        // 4. Purana device item delete kar do
         if (item?._id) {
           await deleteCartItem(item._id);
         }
-      } catch (err) {
-        console.warn("syncDeviceCartToCustomer: item migrate failed", item?._id, err?.message);
+
+        migratedCount++;
+      } catch (itemErr) {
+        console.warn("Cart item migrate failed:", item?._id, itemErr?.message);
       }
     }
 
-    return { success: true, migrated: deviceItems.length };
+    return {
+      success: true,
+      migrated: migratedCount,
+    };
   } catch (err) {
-    console.error("syncDeviceCartToCustomer error:", err?.message);
-    return { success: false, message: err?.message || "sync failed" };
+    console.warn("syncDeviceCartToCustomer failed:", err?.message);
+
+    return {
+      success: false,
+      message: err?.message || "sync failed",
+    };
   }
 }

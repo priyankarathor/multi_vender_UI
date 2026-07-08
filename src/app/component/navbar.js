@@ -168,51 +168,70 @@ export default function Navbar() {
     Math.max(74, searchCategory.length * 7 + 48)
   );
 
-  useEffect(() => {
-    let active = true;
+  // Cart/Wishlist count refresh
+  // Note: 404 ka main fix cart.js + wishlist.js me hai.
+  // Navbar yahan safely count 0 dikha dega, app break nahi hogi.
+ useEffect(() => {
+  let active = true;
+  let debounceTimer = null;
 
-    const updateCounts = async () => {
-      try {
-        const [cartRes, wishlistRes] = await Promise.allSettled([
-          getCartItems(),
-          getWishlistByCidOrDevice(),
-        ]);
+  const readLocalCartCount = () => {
+    try {
+      const savedCart = JSON.parse(localStorage.getItem("cartItems") || "[]");
 
-        if (!active) return;
+      if (!Array.isArray(savedCart)) return 0;
 
-        if (cartRes.status === "fulfilled") {
-          const cartItems = getApiCartList(cartRes.value.data);
-          setCartCount(
-            cartItems.reduce((total, item) => total + getItemQty(item), 0)
-          );
-        } else {
-          setCartCount(0);
-        }
+      return savedCart.reduce((total, item) => {
+        return total + Number(item?.qty || item?.quantity || 1);
+      }, 0);
+    } catch {
+      return 0;
+    }
+  };
 
-        if (wishlistRes.status === "fulfilled") {
-          setWishlistCount(getCountList(wishlistRes.value.data).length);
-        } else {
-          setWishlistCount(0);
-        }
-      } catch {
-        if (!active) return;
-        setCartCount(0);
-        setWishlistCount(0);
-      }
-    };
+  const readLocalWishlistCount = () => {
+    try {
+      const savedWishlist = JSON.parse(
+        localStorage.getItem("wishlistItems") || "[]"
+      );
 
-    updateCounts();
-    window.addEventListener("cartUpdated", updateCounts);
-    window.addEventListener("wishlistUpdated", updateCounts);
-    window.addEventListener("storage", updateCounts);
+      if (!Array.isArray(savedWishlist)) return 0;
 
-    return () => {
-      active = false;
-      window.removeEventListener("cartUpdated", updateCounts);
-      window.removeEventListener("wishlistUpdated", updateCounts);
-      window.removeEventListener("storage", updateCounts);
-    };
-  }, []);
+      return savedWishlist.length;
+    } catch {
+      return 0;
+    }
+  };
+
+  const fetchCounts = () => {
+    if (!active) return;
+
+    setCartCount(readLocalCartCount());
+    setWishlistCount(readLocalWishlistCount());
+  };
+
+  const updateCounts = () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(fetchCounts, 80);
+  };
+
+  fetchCounts();
+
+  window.addEventListener("cartUpdated", updateCounts);
+  window.addEventListener("wishlistUpdated", updateCounts);
+  window.addEventListener("customerUpdated", updateCounts);
+  window.addEventListener("storage", updateCounts);
+
+  return () => {
+    active = false;
+    clearTimeout(debounceTimer);
+
+    window.removeEventListener("cartUpdated", updateCounts);
+    window.removeEventListener("wishlistUpdated", updateCounts);
+    window.removeEventListener("customerUpdated", updateCounts);
+    window.removeEventListener("storage", updateCounts);
+  };
+}, []);
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -418,15 +437,18 @@ export default function Navbar() {
   };
 
   const syncCustomerData = async (cid) => {
+    if (!cid) return;
+
     try {
-      await Promise.all([
+      await Promise.allSettled([
         syncDeviceCartToCustomer(cid),
         syncDeviceWishlistToCustomer(cid),
       ]);
+
       window.dispatchEvent(new Event("cartUpdated"));
       window.dispatchEvent(new Event("wishlistUpdated"));
     } catch (syncError) {
-      console.error("Cart/Wishlist cid sync failed", syncError);
+      console.warn("Cart/Wishlist sync failed:", syncError?.message);
     }
   };
 
