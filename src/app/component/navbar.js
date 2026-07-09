@@ -41,6 +41,7 @@ import {
   ChevronRight,
   ChevronDown,
   MessageCircle,
+  CheckCircle2,
 } from "lucide-react";
 
 const getApiList = (payload) => {
@@ -131,6 +132,7 @@ export default function Navbar() {
   const [wishlistCount, setWishlistCount] = useState(0);
   const [cartCount, setCartCount] = useState(0);
   const [whatsappOtpLoading, setWhatsappOtpLoading] = useState(false);
+  const [shopToast, setShopToast] = useState(null);
 
   // Logged-in customer + profile dropdown
   const [customer, setCustomer] = useState(null);
@@ -232,6 +234,29 @@ export default function Navbar() {
     window.removeEventListener("storage", updateCounts);
   };
 }, []);
+
+  useEffect(() => {
+    let toastTimer = null;
+
+    const showToast = (event) => {
+      setShopToast({
+        title: event.detail?.title || "Added successfully",
+        message: event.detail?.message || "Your item has been saved.",
+      });
+
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        setShopToast(null);
+      }, 3000);
+    };
+
+    window.addEventListener("shopToast", showToast);
+
+    return () => {
+      clearTimeout(toastTimer);
+      window.removeEventListener("shopToast", showToast);
+    };
+  }, []);
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -794,11 +819,6 @@ export default function Navbar() {
                 className="relative w-9 h-9 sm:w-10 sm:h-10 border border-white/10 rounded-xl flex items-center justify-center text-white hover:border-[#FF9900] hover:text-[#FF9900] transition-colors"
               >
                 <Heart size={18} />
-                {wishlistCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-[#FF9900] text-black text-[11px] font-bold flex items-center justify-center">
-                    {wishlistCount}
-                  </span>
-                )}
               </Link>
 
               {/* PROFILE ICON + DROPDOWN */}
@@ -890,11 +910,6 @@ export default function Navbar() {
                 className="relative md:hidden h-9 sm:h-10 px-3 sm:px-4 bg-[#FF9900] rounded-xl flex items-center justify-center gap-2 text-black font-bold text-sm hover:bg-[#ca8f07] transition-colors"
               >
                 <ShoppingBag size={18} /><span>Cart</span>
-                {cartCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-white text-black text-[11px] font-bold flex items-center justify-center">
-                    {cartCount}
-                  </span>
-                )}
               </Link>
               <div className="relative group hidden md:block">
                 <button
@@ -967,11 +982,6 @@ export default function Navbar() {
               className="relative flex items-center gap-2 px-4 py-2 bg-[#FF9900] text-black rounded-xl font-semibold text-sm hover:bg-[#ca8f07] transition-colors whitespace-nowrap ml-auto"
             >
               <ShoppingBag size={18} />Cart
-              {cartCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-white text-black text-[11px] font-bold flex items-center justify-center">
-                  {cartCount}
-                </span>
-              )}
             </Link>
           </div>
         </div>
@@ -1191,11 +1201,6 @@ export default function Navbar() {
                   className="relative flex-1 h-10 rounded-xl border border-white/10 flex items-center justify-center gap-2 text-white/80 text-sm hover:border-[#FF9900] hover:text-[#FF9900] transition-colors"
                 >
                   <Heart size={16} /> Wishlist
-                  {wishlistCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-[#FF9900] text-black text-[11px] font-bold flex items-center justify-center">
-                      {wishlistCount}
-                    </span>
-                  )}
                 </Link>
                 {customer ? (
                   <button
@@ -1242,11 +1247,6 @@ export default function Navbar() {
                   className="relative flex-1 h-10 rounded-xl bg-[#FF9900] flex items-center justify-center gap-2 text-black text-sm font-semibold hover:bg-[#ca8f07] transition-colors"
                 >
                   <ShoppingBag size={16} /> Cart
-                  {cartCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-white text-black text-[11px] font-bold flex items-center justify-center">
-                      {cartCount}
-                    </span>
-                  )}
                 </Link>
               </div>
               <button
@@ -1275,6 +1275,22 @@ export default function Navbar() {
         subToSubCategories={subToSubCategories}
         onVendorClick={openVendorModal}
       />
+
+      {shopToast && (
+        <div className="fixed right-4 top-24 z-[10000] w-[min(340px,calc(100vw-32px))] rounded-xl border border-orange-100 bg-white px-4 py-3 shadow-2xl shadow-black/15">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-50 text-[#FF9900]">
+              <CheckCircle2 size={18} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-gray-900">{shopToast.title}</p>
+              <p className="mt-0.5 text-xs leading-5 text-gray-500">
+                {shopToast.message}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* VENDOR MODAL */}
       {vendorModalOpen &&

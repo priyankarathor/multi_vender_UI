@@ -37,11 +37,7 @@ const getWishlistProductId = (item) => {
 };
 
 const getWishlistVariantId = (item) => {
-  const variant =
-    item?.variantId ||
-    item?.variant_id ||
-    item?.variant;
-
+  const variant = item?.variantId || item?.variant_id || item?.variant;
   return typeof variant === "object" ? variant?._id || null : variant || null;
 };
 
@@ -66,6 +62,18 @@ const getProduct = (item) => {
   return null;
 };
 
+const getWishlistKey = (item, index) => {
+  return (
+    item?._id ||
+    item?.wishlistId ||
+    item?.wishlist_id ||
+    item?.id ||
+    `${getWishlistProductId(item) || "product"}-${
+      getWishlistVariantId(item) || "variant"
+    }-${index}`
+  );
+};
+
 export default function WishlistPage() {
   const [wishlistItems, setWishlistItems] = useState([]);
   const [wishlistReady, setWishlistReady] = useState(false);
@@ -80,7 +88,13 @@ export default function WishlistPage() {
       });
 
       const items = getApiList(res?.data);
-      setWishlistItems(items);
+
+      const uniqueItems = items.filter((item, index, arr) => {
+        const key = getWishlistKey(item, index);
+        return arr.findIndex((x, i) => getWishlistKey(x, i) === key) === index;
+      });
+
+      setWishlistItems(uniqueItems);
     } catch (error) {
       if (error?.response?.status === 404) {
         setWishlistItems([]);
@@ -96,9 +110,7 @@ export default function WishlistPage() {
   useEffect(() => {
     fetchWishlist();
 
-    const refreshWishlist = () => {
-      fetchWishlist();
-    };
+    const refreshWishlist = () => fetchWishlist();
 
     window.addEventListener("wishlistUpdated", refreshWishlist);
     window.addEventListener("customerUpdated", refreshWishlist);
@@ -122,9 +134,7 @@ export default function WishlistPage() {
           const id = category?._id || category?.id;
           const name = category?.name || category?.category || category?.title;
 
-          if (id && name) {
-            map[id] = name;
-          }
+          if (id && name) map[id] = name;
 
           return map;
         }, {});
@@ -141,10 +151,15 @@ export default function WishlistPage() {
   const removeFromWishlist = async (id) => {
     if (!id) return;
 
-    const removedItem = wishlistItems.find((item) => item._id === id);
+    const removedItem = wishlistItems.find(
+      (item) => String(item._id || item.id) === String(id)
+    );
+
     const removedProductId = getWishlistProductId(removedItem);
 
-    setWishlistItems((prev) => prev.filter((item) => item._id !== id));
+    setWishlistItems((prev) =>
+      prev.filter((item) => String(item._id || item.id) !== String(id))
+    );
 
     try {
       await deleteWishlistItem(id);
@@ -158,8 +173,7 @@ export default function WishlistPage() {
           ? removedProductId
             ? savedItems.filter(
                 (item) =>
-                  String(getWishlistProductId(item)) !==
-                  String(removedProductId)
+                  String(getWishlistProductId(item)) !== String(removedProductId)
               )
             : savedItems
           : [];
@@ -272,9 +286,7 @@ export default function WishlistPage() {
 
     const categoryId = typeof category === "object" ? category?._id : category;
     const categoryName =
-      typeof category === "object"
-        ? category?.name || category?.title
-        : null;
+      typeof category === "object" ? category?.name || category?.title : null;
 
     return (
       categoryName ||
@@ -330,79 +342,84 @@ export default function WishlistPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {wishlistItems.map((item) => (
-              <div
-                key={item._id}
-                className="bg-white border border-gray-200 rounded-2xl overflow-hidden hover:shadow-md transition"
-              >
-                <Link href={getProductLink(item)} className="block">
-                  <div className="relative aspect-square bg-gray-100 overflow-hidden">
-                    <img
-                      src={getImage(item)}
-                      alt={getName(item)}
-                      className="w-full h-full object-cover"
-                    />
+            {wishlistItems.map((item, index) => {
+              const itemId = item?._id || item?.id;
+              const key = getWishlistKey(item, index);
 
-                    <span className="absolute top-2 left-2 text-[10px] px-2 py-1 bg-black text-white rounded-full">
-                      {getCategoryName(item)}
-                    </span>
-                  </div>
-                </Link>
+              return (
+                <div
+                  key={key}
+                  className="bg-white border border-gray-200 rounded-2xl overflow-hidden hover:shadow-md transition"
+                >
+                  <Link href={getProductLink(item)} className="block">
+                    <div className="relative aspect-square bg-gray-100 overflow-hidden">
+                      <img
+                        src={getImage(item)}
+                        alt={getName(item)}
+                        className="w-full h-full object-cover"
+                      />
 
-                <div className="p-3">
-                  <h2 className="text-sm font-semibold line-clamp-2 min-h-[40px]">
-                    {getName(item)}
-                  </h2>
+                      <span className="absolute top-2 left-2 text-[10px] px-2 py-1 bg-black text-white rounded-full">
+                        {getCategoryName(item)}
+                      </span>
+                    </div>
+                  </Link>
 
-                  <p className="font-bold mt-2">
-                    Rs. {Number(getPrice(item)).toLocaleString("en-IN")}
-                  </p>
+                  <div className="p-3">
+                    <h2 className="text-sm font-semibold line-clamp-2 min-h-[40px]">
+                      {getName(item)}
+                    </h2>
 
-                  <div className="mt-2 flex items-center gap-2 w-fit rounded-lg border border-gray-200 px-2 py-1">
-                    <button
-                      type="button"
-                      onClick={() => changeQty(item, -1)}
-                      className="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-black"
-                      aria-label="Decrease quantity"
-                    >
-                      -
-                    </button>
+                    <p className="font-bold mt-2">
+                      Rs. {Number(getPrice(item)).toLocaleString("en-IN")}
+                    </p>
 
-                    <span className="text-xs font-semibold w-5 text-center">
-                      {item?.qty || item?.quantity || 1}
-                    </span>
+                    <div className="mt-2 flex items-center gap-2 w-fit rounded-lg border border-gray-200 px-2 py-1">
+                      <button
+                        type="button"
+                        onClick={() => changeQty(item, -1)}
+                        className="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-black"
+                        aria-label="Decrease quantity"
+                      >
+                        -
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => changeQty(item, 1)}
-                      className="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-black"
-                      aria-label="Increase quantity"
-                    >
-                      +
-                    </button>
-                  </div>
+                      <span className="text-xs font-semibold w-5 text-center">
+                        {item?.qty || item?.quantity || 1}
+                      </span>
 
-                  <div className="mt-3 flex gap-2">
-                    <Link
-                      href={getProductLink(item)}
-                      className="flex-1 h-9 rounded-xl bg-black text-white text-xs flex items-center justify-center gap-1.5 hover:bg-zinc-800 transition"
-                    >
-                      <ShoppingCart size={14} />
-                      View
-                    </Link>
+                      <button
+                        type="button"
+                        onClick={() => changeQty(item, 1)}
+                        className="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-black"
+                        aria-label="Increase quantity"
+                      >
+                        +
+                      </button>
+                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() => removeFromWishlist(item._id)}
-                      className="w-10 h-9 rounded-xl border border-red-100 text-red-500 hover:bg-red-50 flex items-center justify-center transition"
-                      aria-label="Remove from wishlist"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <div className="mt-3 flex gap-2">
+                      <Link
+                        href={getProductLink(item)}
+                        className="flex-1 h-9 rounded-xl bg-black text-white text-xs flex items-center justify-center gap-1.5 hover:bg-zinc-800 transition"
+                      >
+                        <ShoppingCart size={14} />
+                        View
+                      </Link>
+
+                      <button
+                        type="button"
+                        onClick={() => removeFromWishlist(itemId)}
+                        className="w-10 h-9 rounded-xl border border-red-100 text-red-500 hover:bg-red-50 flex items-center justify-center transition"
+                        aria-label="Remove from wishlist"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

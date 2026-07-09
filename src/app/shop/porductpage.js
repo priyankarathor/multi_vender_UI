@@ -6,7 +6,6 @@ import { useSearchParams } from "next/navigation";
 import {
   Star,
   Heart,
-  Eye,
   SlidersHorizontal,
   X,
   ChevronLeft,
@@ -787,8 +786,16 @@ export default function ShopPage() {
         divid: deviceId,
         qty: 1,
         variantId: product.variantId || product.defaultVariant?._id || null,
-        venderid: product.vendorId || product.venderid || null,
-        offerDiscount: product.discount || 0,
+        vendorId: product.vendorId || product.venderid || null,
+        productData: {
+          ...product,
+          _id: product._id || product.id,
+          name: product.name,
+          price: product.price,
+          image: product.image,
+          category: product.category,
+          categoryId: product.category,
+        },
       });
 
     try {
@@ -813,12 +820,28 @@ export default function ShopPage() {
       if (!existingItem) {
         await createBackendWishlistItem(deviceId);
         window.dispatchEvent(new Event("wishlistUpdated"));
+        window.dispatchEvent(
+          new CustomEvent("shopToast", {
+            detail: {
+              title: "Added to wishlist",
+              message: "Saved for later in your wishlist.",
+            },
+          })
+        );
       }
     } catch (error) {
       if (!shouldRemove) {
         try {
           await createBackendWishlistItem(getCartDeviceId());
           window.dispatchEvent(new Event("wishlistUpdated"));
+          window.dispatchEvent(
+            new CustomEvent("shopToast", {
+              detail: {
+                title: "Added to wishlist",
+                message: "Saved for later in your wishlist.",
+              },
+            })
+          );
           return;
         } catch (createError) {
           console.error(
@@ -1018,119 +1041,147 @@ export default function ShopPage() {
           </div>
         ) : (
           <div
-            className={`grid auto-rows-fr gap-5 p-4 ${
+            className={`grid auto-rows-fr gap-x-4 gap-y-8 p-4 sm:gap-x-5 ${
               view === "grid"
                 ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
                 : "grid-cols-2 md:grid-cols-3"
             }`}
           >
-            {paginatedProducts.map((p) => (
-              <Link
-                key={p.id}
-                href={`/ProductDetailpage/${p.id}`}
-                onClick={() => rememberProduct(p)}
-                className="h-full"
-              >
-                <div className="group flex h-full min-h-[415px] flex-col overflow-hidden rounded-2xl border bg-white transition duration-300 hover:shadow-xl">
+            {paginatedProducts.map((p) => {
+              const mrp = Number(p.mrp) || 0;
+              const price = Number(p.price) || 0;
+              const hasDiscount = mrp > price;
+              const discountPercent = hasDiscount
+                ? Math.round(((mrp - price) / mrp) * 100)
+                : 0;
+              const brandName =
+                p.brand ||
+                p.brandName ||
+                getCategoryName(p.category) ||
+                "Product";
 
-                  {/* IMAGE */}
-                  <div className="relative aspect-square overflow-hidden">
-                    {p.image ? (
-                      <img
-                        src={p.image}
-                        alt={p.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-gray-100 text-xs text-gray-400">
-                        No image available
-                      </div>
-                    )}
+              return (
+                <Link
+                  key={p.id}
+                  href={`/ProductDetailpage/${p.id}`}
+                  onClick={() => rememberProduct(p)}
+                  className="group block h-full"
+                >
+                  <div className="flex h-full flex-col overflow-hidden bg-white shadow-md shadow-zinc-200/80 transition duration-300 hover:shadow-xl hover:shadow-zinc-300/80">
 
-                    <span className="absolute top-2 left-2 text-[10px] px-2 py-1 bg-black text-white rounded-full">
-                      {getCategoryName(p.category)}
-                    </span>
+                    {/* IMAGE */}
+                    <div className="relative aspect-[4/5] overflow-hidden bg-zinc-100">
+                      {p.image ? (
+                        <img
+                          src={p.image}
+                          alt={p.name}
+                          className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-gray-100 text-xs text-gray-400">
+                          No image available
+                        </div>
+                      )}
 
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        const isAlreadyLiked = wishlistItems.some(
-                          (item) => item.id === p.id
-                        );
-                        toggleWishlist(p);
-                        syncWishlistWithBackend(p, isAlreadyLiked);
-                      }}
-                      className="absolute top-2 right-2 z-10 w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center hover:bg-[#FF9900] hover:text-black transition"
-                      aria-label="Add to wishlist"
-                    >
-                      <Heart
-                        size={15}
-                        className={
-                          wishlistItems.some((item) => item.id === p.id)
-                            ? "fill-[#FF9900] text-[#FF9900]"
-                            : "text-gray-700"
-                        }
-                      />
-                    </button>
-                  </div>
+                      {(p.isNew || p.is_new) && (
+                        <span className="absolute left-0 top-4 bg-[#ff4f73] px-2 py-1 text-[10px] font-bold uppercase leading-none text-white">
+                          New
+                        </span>
+                      )}
 
-                  {/* CONTENT */}
-                  <div className="flex flex-1 flex-col p-3">
-                    <h3 className="min-h-[40px] text-sm font-semibold leading-5 line-clamp-2">
-                      {p.name}
-                    </h3>
+                      {(p.isSponsored || p.is_sponsored) && (
+                        <span className="absolute right-2 top-2 rounded-sm bg-slate-400 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-white">
+                          AD
+                        </span>
+                      )}
 
-                    <div className="flex items-center gap-1 mt-1">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <Star
-                          key={i}
-                          size={12}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          const isAlreadyLiked = wishlistItems.some(
+                            (item) => item.id === p.id
+                          );
+                          toggleWishlist(p);
+                          syncWishlistWithBackend(p, isAlreadyLiked);
+                        }}
+                        className={`absolute right-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-gray-700 shadow-sm transition hover:bg-[#FF9900] hover:text-black ${
+                          p.isSponsored || p.is_sponsored ? "top-8" : "top-2"
+                        }`}
+                        aria-label="Add to wishlist"
+                      >
+                        <Heart
+                          size={15}
                           className={
-                            i < Math.floor(p.rating)
-                              ? "fill-yellow-400 text-yellow-400"
-                              : "text-zinc-300"
+                            wishlistItems.some((item) => item.id === p.id)
+                              ? "fill-[#FF9900] text-[#FF9900]"
+                              : "text-gray-700"
                           }
                         />
-                      ))}
+                      </button>
                     </div>
 
-                    <div className="mt-2 flex items-center gap-2">
-                      <p className="font-bold">
-                        Rs.{Number(p.price).toLocaleString()}
+                    {/* CONTENT */}
+                    <div className="flex flex-1 flex-col bg-white px-3 pb-3 pt-3 sm:px-4">
+                      <p className="line-clamp-1 text-sm font-extrabold uppercase tracking-normal text-slate-900 sm:text-base">
+                        {brandName}
                       </p>
-                      {p.mrp > p.price && (
-                        <p className="text-xs text-zinc-500 line-through">
-                          Rs.{Number(p.mrp).toLocaleString()}
+
+                      <h3 className="mt-0.5 min-h-[38px] text-sm leading-5 text-slate-700 line-clamp-2">
+                        {p.name}
+                      </h3>
+
+                      <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <p className="text-sm font-extrabold text-black sm:text-[15px]">
+                          Rs. {price.toLocaleString()}
                         </p>
-                      )}
-                    </div>
+                        {hasDiscount && (
+                          <>
+                            <p className="text-xs text-zinc-500 line-through">
+                              Rs. {mrp.toLocaleString()}
+                            </p>
+                            <p className="text-xs font-medium text-[#ff6240]">
+                              ({discountPercent}% OFF)
+                            </p>
+                          </>
+                        )}
+                      </div>
 
-                    <p
-                      className={`mt-1 text-xs font-medium ${
-                        p.stock == null
-                          ? "text-zinc-500"
+                      <p
+                        className={`mt-1 text-xs font-medium ${
+                          p.stock == null
+                            ? "text-zinc-500"
+                            : p.stock > 0
+                              ? "text-green-700"
+                              : "text-red-600"
+                        }`}
+                      >
+                        {p.stock == null
+                          ? "Stock not listed"
                           : p.stock > 0
-                            ? "text-green-700"
-                            : "text-red-600"
-                      }`}
-                    >
-                      {p.stock == null
-                        ? "Stock not listed"
-                        : p.stock > 0
-                          ? `Stock: ${p.stock}`
-                          : "Out of stock"}
-                    </p>
+                            ? `Stock: ${p.stock}`
+                            : "Out of stock"}
+                      </p>
 
-                    <button className="mt-auto flex w-full items-center justify-center gap-2 rounded-xl bg-black py-2 text-xs text-white hover:bg-zinc-800">
-                      <Eye size={14} />
-                      View
-                    </button>
+                      <div className="mt-2 flex items-center gap-1">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Star
+                            key={i}
+                            size={12}
+                            className={
+                              i < Math.floor(p.rating)
+                                ? "fill-yellow-400 text-yellow-400"
+                                : "text-zinc-300"
+                            }
+                          />
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         )}
 

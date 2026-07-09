@@ -61,10 +61,14 @@ function getDisplayValue(value) {
   return String(value);
 }
 
+// FIXED: ab "Size Options", "Color Options" jaise names bhi match honge
+// (pehle sirf exact "size"/"color" match hota tha, isliye Jajot ke
+// attribute names pe selector nahi dikh raha tha)
 function getOptionValues(product, names) {
-  const option = product?.attributesMeta?.find((attribute) =>
-    names.includes(String(attribute?.name || "").toLowerCase())
-  );
+  const option = product?.attributesMeta?.find((attribute) => {
+    const attrName = String(attribute?.name || "").toLowerCase();
+    return names.some((name) => attrName.includes(name));
+  });
 
   return Array.isArray(option?.values) ? option.values.filter(Boolean) : [];
 }
@@ -201,9 +205,6 @@ export default function ProductDetailsPage({
     return () => window.clearTimeout(timer);
   }, []);
 
-  // Wishlist ab backend se load hota hai (localStorage se nahi), taaki
-  // har item ka real backend _id pata rahe -- delete ke liye yahi _id chahiye.
-  // Ab cid ho tho cid se, warna divid se (cart wala hi pattern).
   useEffect(() => {
     let active = true;
 
@@ -213,7 +214,6 @@ export default function ProductDetailsPage({
         const items = Array.isArray(res?.data?.data) ? res.data.data : [];
         if (active) setWishlistItems(items);
       } catch (err) {
-        // backend "no wishlist found" pe 404 deta hai -- isko empty treat karo
         if (active) setWishlistItems([]);
       }
     };
@@ -392,8 +392,6 @@ export default function ProductDetailsPage({
         return sameProduct && sameVariant;
       });
 
-      // Vendor id hamesha resolve karo -- pehle existing cart item se,
-      // warna product se (backend "venderid" field required hai, warna 500 aata hai)
       const resolvedVendorId =
         getCartVendorId(existingApiItem) || product.vendorId || product.venderid || null;
 
@@ -452,6 +450,14 @@ export default function ProductDetailsPage({
       }
 
       window.dispatchEvent(new Event("cartUpdated"));
+      window.dispatchEvent(
+        new CustomEvent("shopToast", {
+          detail: {
+            title: "Added to cart",
+            message: "Your product is ready in the cart.",
+          },
+        })
+      );
       return true;
     } catch (err) {
       setCartPreviewItems([cartProduct]);
@@ -470,7 +476,6 @@ export default function ProductDetailsPage({
     if (added) router.push("/Addtocard");
   };
 
-  // ----- FIXED: ab backend ke real _id ke saath kaam karta hai -----
   const handleToggleWishlist = async () => {
     if (!product || togglingWishlist) return;
 
@@ -485,7 +490,6 @@ export default function ProductDetailsPage({
 
     try {
       if (existingItem) {
-        // optimistic remove
         setWishlistItems((prev) =>
           prev.filter((item) => item._id !== existingItem._id)
         );
@@ -498,8 +502,16 @@ export default function ProductDetailsPage({
           divid: deviceId,
           qty: 1,
           variantId: selectedVariant?._id || null,
-          venderid: product.vendorId || product.venderid || null,
-          offerDiscount: discount || product.discount || 0,
+          vendorId: product.vendorId || product.venderid || null,
+          productData: {
+            ...product,
+            _id: product._id || product.id,
+            name: product.name || product.productName || product.itemName,
+            price,
+            image: activeImage,
+            category: product.category,
+            categoryId: product.categoryId || product.category,
+          },
         });
 
         const created = res?.data?.data;
@@ -507,6 +519,14 @@ export default function ProductDetailsPage({
           setWishlistItems((prev) => [...prev, created]);
         }
         window.dispatchEvent(new Event("wishlistUpdated"));
+        window.dispatchEvent(
+          new CustomEvent("shopToast", {
+            detail: {
+              title: "Added to wishlist",
+              message: "Saved for later in your wishlist.",
+            },
+          })
+        );
       }
     } catch (err) {
       console.error(
@@ -664,6 +684,7 @@ export default function ProductDetailsPage({
                 ))}
               </div>
 
+              {/* MOVED UP: colour selector ab price/badges ke turant baad hai */}
               {colors.length > 0 && (
                 <div className="border-b border-gray-200 py-5">
                   <h3 className="mb-3 text-sm font-semibold text-[#0F1111]">
@@ -700,6 +721,7 @@ export default function ProductDetailsPage({
                 </div>
               )}
 
+              {/* MOVED UP: size selector bhi upar hi */}
               {sizes.length > 0 && (
                 <div className="border-b border-gray-200 py-5">
                   <h3 className="mb-3 text-sm font-semibold text-[#0F1111]">
@@ -729,6 +751,41 @@ export default function ProductDetailsPage({
                         }`}
                       >
                         {size}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* MOVED UP: "All variants" cards ab Product information se pehle */}
+              {variants.length > 0 && (
+                <div className="border-b border-gray-200 py-5">
+                  <h3 className="mb-3 text-base font-semibold text-[#0F1111]">
+                    All variants
+                  </h3>
+                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                    {variants.map((variant) => (
+                      <button
+                        key={variant._id}
+                        onClick={() => setSelectedVariantId(variant._id)}
+                        className={`min-w-[150px] max-w-[170px] flex-shrink-0 rounded-md border p-3 text-left text-sm transition ${
+                          selectedVariant?._id === variant._id
+                            ? "border-[#E47911] bg-[#FFF8F0]"
+                            : "border-gray-200 hover:border-[#E47911]"
+                        }`}
+                      >
+                        <p className="font-medium text-[#0F1111]">
+                          {variant.color || "Default"} {variant.size || ""}
+                        </p>
+                        <p className="text-[#0F1111]">
+                          Price: Rs.{Number(variant.sellingPrice || 0).toLocaleString()}
+                        </p>
+                        {variant.mrp && (
+                          <p className="text-[#565959] line-through">
+                            MRP: Rs.{Number(variant.mrp).toLocaleString()}
+                          </p>
+                        )}
+                        <p className="text-[#565959]">Stock: {variant.stock ?? 0}</p>
                       </button>
                     ))}
                   </div>
@@ -788,40 +845,6 @@ export default function ProductDetailsPage({
                   </div>
                 )}
               </div>
-
-              {variants.length > 0 && (
-                <div className="py-5">
-                  <h3 className="mb-3 text-base font-semibold text-[#0F1111]">
-                    All variants
-                  </h3>
-                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                    {variants.map((variant) => (
-                      <button
-                        key={variant._id}
-                        onClick={() => setSelectedVariantId(variant._id)}
-                        className={`min-w-[150px] max-w-[170px] flex-shrink-0 rounded-md border p-3 text-left text-sm transition ${
-                          selectedVariant?._id === variant._id
-                            ? "border-[#E47911] bg-[#FFF8F0]"
-                            : "border-gray-200 hover:border-[#E47911]"
-                        }`}
-                      >
-                        <p className="font-medium text-[#0F1111]">
-                          {variant.color || "Default"} {variant.size || ""}
-                        </p>
-                        <p className="text-[#0F1111]">
-                          Price: Rs.{Number(variant.sellingPrice || 0).toLocaleString()}
-                        </p>
-                        {variant.mrp && (
-                          <p className="text-[#565959] line-through">
-                            MRP: Rs.{Number(variant.mrp).toLocaleString()}
-                          </p>
-                        )}
-                        <p className="text-[#565959]">Stock: {variant.stock ?? 0}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="order-4 h-fit lg:sticky lg:top-[11.5rem]">
