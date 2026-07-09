@@ -58,3 +58,84 @@ export const saveCustomerSession = (data) => {
 
   return cid;
 };
+
+// ---------- NAYA CODE: AddressForm autofill ke liye ----------
+
+const nameKeys = ["fullName", "name", "customerName", "userName"];
+const mobileKeys = [
+  "mobile",
+  "mobileNo",
+  "mobileNumber",
+  "phone",
+  "phoneNumber",
+  "contact",
+  "contactNumber",
+];
+const emailKeys = ["email", "emailId", "emailAddress"];
+const addressObjectKeys = [
+  "address",
+  "shippingAddress",
+  "defaultAddress",
+  "savedAddress",
+];
+
+const findFieldInObject = (value, fieldKeys, visited = new Set()) => {
+  if (!value || typeof value !== "object" || visited.has(value)) return null;
+  visited.add(value);
+
+  for (const key of fieldKeys) {
+    if (value[key]) return value[key];
+  }
+
+  for (const key of userObjectKeys) {
+    const nested = findFieldInObject(value[key], fieldKeys, visited);
+    if (nested) return nested;
+  }
+
+  return null;
+};
+
+const findAddressInObject = (value, visited = new Set()) => {
+  if (!value || typeof value !== "object" || visited.has(value)) return null;
+  visited.add(value);
+
+  for (const key of addressObjectKeys) {
+    if (value[key] && typeof value[key] === "object") return value[key];
+  }
+
+  for (const key of userObjectKeys) {
+    const nested = findAddressInObject(value[key], visited);
+    if (nested) return nested;
+  }
+
+  return null;
+};
+
+// Login/register ke baad AddressForm ko autofill karne ke liye —
+// localStorage ke "user" object se name/mobile/email/address nikalta hai.
+// Jo field backend se nahi milti wo empty string rahegi (form khali chodega).
+export const getLoggedInCustomerInfo = () => {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "null");
+    if (!user) return null;
+
+    const address = findAddressInObject(user) || {};
+
+    return {
+      fullName: findFieldInObject(user, nameKeys) || "",
+      mobile: findFieldInObject(user, mobileKeys) || "",
+      email: findFieldInObject(user, emailKeys) || "",
+      pincode: address.pincode || address.pinCode || address.zip || "",
+      houseNumber: address.houseNumber || address.house || "",
+      area: address.area || address.street || address.addressLine1 || "",
+      locality: address.locality || address.addressLine2 || "",
+      city: address.city || "",
+      state: address.state || "",
+      landmark: address.landmark || "",
+    };
+  } catch {
+    return null;
+  }
+};
