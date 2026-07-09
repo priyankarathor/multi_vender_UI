@@ -1,0 +1,6 @@
+{"timestamp":"00:00:02.299","source":"Server","level":"LOG","message":""}
+{"timestamp":"00:00:14.699","source":"Server","level":"LOG","message":"○ Compiling / ..."}
+{"timestamp":"00:00:33.060","source":"Browser","level":"INFO","message":"%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"}
+{"timestamp":"00:00:38.335","source":"Browser","level":"WARN","message":"[GSI_LOGGER]: google.accounts.id.initialize() is called multiple times. This could cause unexpected behavior and only the last initialized instance will be used."}
+{"timestamp":"00:00:38.420","source":"Server","level":"WARN","message":"[browser] \"\\u001b[33m[GSI_LOGGER]: google.accounts.id.initialize() is called multiple times. This could cause unexpected behavior and only the last initialized instance will be used.\\u001b[39m\" \"\\u001b[2m(https://accounts.google.com/gsi/client:87:460)\\u001b[22m\""}
+{"timestamp":"00:00:38.421","source":"Browser","level":"WARN","message":"\u001b[33m[GSI_LOGGER]: google.accounts.id.initialize() is called multiple times. This could cause unexpected behavior and only the last initialized instance will be used.\u001b[39m"}
