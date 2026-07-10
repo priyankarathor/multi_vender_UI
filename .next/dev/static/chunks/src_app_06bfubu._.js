@@ -3264,38 +3264,354 @@ __turbopack_context__.s([
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/compiled/react/jsx-dev-runtime.js [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$compiler$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/compiled/react/compiler-runtime.js [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$app$2f$ProductDetailpage$2f$productdetails$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/app/ProductDetailpage/productdetails.js [app-client] (ecmascript)");
-(()=>{
-    const e = new Error("Cannot find module '..demy/demyProduct'");
-    e.code = 'MODULE_NOT_FOUND';
-    throw e;
-})();
 "use client";
 ;
 ;
 ;
-;
+const rawDummyProduct = {
+    productName: "Titan Neo Analog Watch",
+    itemName: "Titan Neo Analog Watch for Men",
+    productUrl: "titan-neo-analog-watch-men",
+    categoryId: "6a509c70a781e80ab7911079",
+    vendorId: "6a462754c6c08add7b774f63",
+    brandName: "Titan",
+    sku: "TITAN-NEO",
+    description: {
+        productDescription: "Titan Neo Analog Watch for Men with premium stainless steel strap, quartz movement, mineral glass protection, and water resistance. Perfect for formal and casual occasions.",
+        bulletPoints: [
+            "Quartz Analog Movement",
+            "Premium Stainless Steel Strap",
+            "Round Dial",
+            "Mineral Glass Protection",
+            "30M Water Resistant",
+            "Date Display",
+            "2 Years Manufacturer Warranty",
+            "Suitable for Daily Wear"
+        ]
+    },
+    images: [
+        "https://images.unsplash.com/photo-1524805444758-089113d48a6d?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1547996160-81dfa63595aa?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1509048191080-d2984bad6ae5?q=80&w=1200&auto=format&fit=crop"
+    ],
+    isActive: true,
+    status: "draft",
+    tags: [
+        "watch",
+        "titan",
+        "analog",
+        "men",
+        "fashion"
+    ],
+    attributes: [
+        {
+            name: "Brand",
+            code: "brand",
+            value: "Titan",
+            type: "dropdown",
+            unit: ""
+        },
+        {
+            name: "Model",
+            code: "model",
+            value: "Neo",
+            type: "text",
+            unit: ""
+        },
+        {
+            name: "Gender",
+            code: "gender",
+            value: "Men",
+            type: "dropdown",
+            unit: ""
+        },
+        {
+            name: "Display Type",
+            code: "display_type",
+            value: "Analog",
+            type: "dropdown",
+            unit: ""
+        },
+        {
+            name: "Movement",
+            code: "movement",
+            value: "Quartz",
+            type: "dropdown",
+            unit: ""
+        },
+        {
+            name: "Case Material",
+            code: "case_material",
+            value: "Stainless Steel",
+            type: "dropdown",
+            unit: ""
+        },
+        {
+            name: "Strap Material",
+            code: "strap_material",
+            value: "Stainless Steel",
+            type: "dropdown",
+            unit: ""
+        },
+        {
+            name: "Dial Shape",
+            code: "dial_shape",
+            value: "Round",
+            type: "dropdown",
+            unit: ""
+        },
+        {
+            name: "Dial Size",
+            code: "dial_size",
+            value: "42",
+            type: "number",
+            unit: "mm"
+        },
+        {
+            name: "Water Resistance",
+            code: "water_resistance",
+            value: "30",
+            type: "number",
+            unit: "m"
+        },
+        {
+            name: "Warranty",
+            code: "warranty",
+            value: "2 Years",
+            type: "text",
+            unit: ""
+        }
+    ],
+    variants: [
+        {
+            sku: "TITAN-NEO-SLV",
+            productUrl: "titan-neo-analog-watch-silver",
+            mrp: 4999,
+            sellingPrice: 4499,
+            salePrice: 3999,
+            handlingTime: 2,
+            itemCondition: "New",
+            images: [
+                "https://images.unsplash.com/photo-1524805444758-089113d48a6d?q=80&w=1200&auto=format&fit=crop",
+                "https://images.unsplash.com/photo-1547996160-81dfa63595aa?q=80&w=1200&auto=format&fit=crop"
+            ],
+            attributes: [
+                {
+                    name: "Color",
+                    code: "color",
+                    value: "Silver"
+                }
+            ],
+            description: {
+                productDescription: "Silver variant classic stainless steel finish ke saath aata hai, jo formal aur office wear ke liye perfect hai.",
+                bulletPoints: [
+                    "Silver Stainless Steel Finish",
+                    "Quartz Analog Movement",
+                    "Round Dial with Mineral Glass",
+                    "30M Water Resistant",
+                    "Best suited for Formal Wear"
+                ]
+            },
+            inventory: {
+                stock: 20,
+                maxQty: 3,
+                isActive: true
+            }
+        },
+        {
+            sku: "TITAN-NEO-GLD",
+            productUrl: "titan-neo-analog-watch-gold",
+            mrp: 5499,
+            sellingPrice: 4999,
+            salePrice: 4699,
+            handlingTime: 2,
+            itemCondition: "New",
+            images: [
+                "https://images.unsplash.com/photo-1524592094714-0f0654e20314?q=80&w=1200&auto=format&fit=crop",
+                "https://images.unsplash.com/photo-1547996160-81dfa63595aa?q=80&w=1200&auto=format&fit=crop"
+            ],
+            attributes: [
+                {
+                    name: "Color",
+                    code: "color",
+                    value: "Gold"
+                }
+            ],
+            description: {
+                productDescription: "Gold variant ek premium aur royal look deta hai, jo festive aur special occasions ke liye ideal hai.",
+                bulletPoints: [
+                    "Premium Gold-Tone Finish",
+                    "Quartz Analog Movement",
+                    "Round Dial with Mineral Glass",
+                    "30M Water Resistant",
+                    "Great for Festive and Special Occasions"
+                ]
+            },
+            inventory: {
+                stock: 15,
+                maxQty: 3,
+                isActive: true
+            }
+        },
+        {
+            sku: "TITAN-NEO-RGD",
+            productUrl: "titan-neo-analog-watch-rose-gold",
+            mrp: 5999,
+            sellingPrice: 5499,
+            salePrice: 5199,
+            handlingTime: 3,
+            itemCondition: "New",
+            images: [
+                "https://images.unsplash.com/photo-1509048191080-d2984bad6ae5?q=80&w=1200&auto=format&fit=crop",
+                "https://images.unsplash.com/photo-1547996160-81dfa63595aa?q=80&w=1200&auto=format&fit=crop"
+            ],
+            attributes: [
+                {
+                    name: "Color",
+                    code: "color",
+                    value: "Rose Gold"
+                }
+            ],
+            description: {
+                productDescription: "Rose Gold variant modern aur trendy look ke liye best hai, jo casual aur party wear dono mein achha lagta hai.",
+                bulletPoints: [
+                    "Trendy Rose Gold Finish",
+                    "Quartz Analog Movement",
+                    "Round Dial with Mineral Glass",
+                    "30M Water Resistant",
+                    "Perfect for Casual and Party Wear"
+                ]
+            },
+            inventory: {
+                stock: 10,
+                maxQty: 3,
+                isActive: true
+            }
+        }
+    ]
+};
+function getAttributeValue(attributes, code) {
+    if (!Array.isArray(attributes)) {
+        return "";
+    }
+    const normalizedCode = String(code || "").trim().toLowerCase();
+    const matchedAttribute = attributes.find((attribute)=>{
+        const attributeCode = String(attribute?.code || "").trim().toLowerCase();
+        const attributeName = String(attribute?.name || "").trim().toLowerCase();
+        return attributeCode === normalizedCode || attributeName === normalizedCode;
+    });
+    return matchedAttribute?.value || "";
+}
+function normalizeDummyProduct(raw) {
+    if (!raw) {
+        return null;
+    }
+    const variants = Array.isArray(raw.variants) ? raw.variants.map((variant, index)=>{
+        const variantId = variant?._id || variant?.id || variant?.sku || `dummy-variant-${index}`;
+        const color = getAttributeValue(variant?.attributes, "color");
+        const size = getAttributeValue(variant?.attributes, "size");
+        const finalPrice = variant?.salePrice ?? variant?.sellingPrice ?? variant?.price ?? variant?.mrp ?? 0;
+        const stock = Number(variant?.inventory?.stock ?? 0);
+        const maxQuantity = variant?.inventory?.maxQty ?? variant?.maxQuantity ?? null;
+        return {
+            ...variant,
+            _id: variantId,
+            id: variantId,
+            color,
+            size,
+            price: Number(finalPrice),
+            sellingPrice: Number(variant?.sellingPrice ?? variant?.salePrice ?? finalPrice),
+            salePrice: Number(variant?.salePrice ?? finalPrice),
+            mrp: Number(variant?.mrp ?? 0),
+            stock,
+            maxQuantity,
+            images: Array.isArray(variant?.images) ? variant.images : [],
+            attributes: Array.isArray(variant?.attributes) ? variant.attributes : [],
+            description: variant?.description || {
+                productDescription: "",
+                bulletPoints: []
+            },
+            inventory: {
+                stock,
+                maxQty: maxQuantity,
+                isActive: variant?.inventory?.isActive ?? true
+            },
+            vendorId: variant?.vendorId || raw?.vendorId || null
+        };
+    }) : [];
+    const firstVariant = variants[0] || null;
+    const productId = raw?._id || raw?.id || raw?.productUrl || raw?.sku || "dummy-titan-neo";
+    const productName = raw?.productName || raw?.itemName || raw?.name || "Product";
+    const brandName = raw?.brandName || raw?.brand || getAttributeValue(raw?.attributes, "brand");
+    return {
+        ...raw,
+        _id: productId,
+        id: productId,
+        productName,
+        itemName: raw?.itemName || productName,
+        name: productName,
+        brand: brandName,
+        brandName,
+        vendorId: raw?.vendorId || null,
+        images: Array.isArray(raw?.images) ? raw.images : [],
+        thumbnailImage: raw?.thumbnailImage || raw?.images?.[0] || firstVariant?.images?.[0] || "",
+        attributes: Array.isArray(raw?.attributes) ? raw.attributes : [],
+        description: raw?.description || {
+            productDescription: "",
+            bulletPoints: []
+        },
+        variants,
+        defaultVariant: firstVariant,
+        price: Number(firstVariant?.price ?? 0),
+        sellingPrice: Number(firstVariant?.sellingPrice ?? 0),
+        salePrice: Number(firstVariant?.salePrice ?? firstVariant?.price ?? 0),
+        mrp: Number(firstVariant?.mrp ?? 0),
+        stock: Number(firstVariant?.stock ?? 0),
+        maxQuantity: firstVariant?.maxQuantity ?? null
+    };
+}
+const dummyProduct = normalizeDummyProduct(rawDummyProduct);
 function DummyVariantTestPage() {
-    const $ = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$compiler$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["c"])(2);
-    if ($[0] !== "e46ecfa1c1cf6689942512800452d985f23d19f179826ed811285887745379f8") {
-        for(let $i = 0; $i < 2; $i += 1){
+    const $ = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$compiler$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["c"])(3);
+    if ($[0] !== "dfd2b39500e5cb55c575bc7a2a90b841cf9a5dc24edbb4194f876e419894c5c1") {
+        for(let $i = 0; $i < 3; $i += 1){
             $[$i] = Symbol.for("react.memo_cache_sentinel");
         }
-        $[0] = "e46ecfa1c1cf6689942512800452d985f23d19f179826ed811285887745379f8";
+        $[0] = "dfd2b39500e5cb55c575bc7a2a90b841cf9a5dc24edbb4194f876e419894c5c1";
+    }
+    if (!dummyProduct) {
+        let t0;
+        if ($[1] === Symbol.for("react.memo_cache_sentinel")) {
+            t0 = /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                style: {
+                    padding: "40px",
+                    textAlign: "center"
+                },
+                children: "Product data not found"
+            }, void 0, false, {
+                fileName: "[project]/src/app/demyProductDetails/page.js",
+                lineNumber: 251,
+                columnNumber: 12
+            }, this);
+            $[1] = t0;
+        } else {
+            t0 = $[1];
+        }
+        return t0;
     }
     let t0;
-    if ($[1] === Symbol.for("react.memo_cache_sentinel")) {
-        const dummyProduct = normalizeDummyProduct(rawDummyProduct);
+    if ($[2] === Symbol.for("react.memo_cache_sentinel")) {
         t0 = /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$app$2f$ProductDetailpage$2f$productdetails$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
             initialProduct: dummyProduct,
             initialProductId: dummyProduct.id
         }, void 0, false, {
             fileName: "[project]/src/app/demyProductDetails/page.js",
-            lineNumber: 17,
+            lineNumber: 263,
             columnNumber: 10
         }, this);
-        $[1] = t0;
+        $[2] = t0;
     } else {
-        t0 = $[1];
+        t0 = $[2];
     }
     return t0;
 }
