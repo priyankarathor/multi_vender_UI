@@ -108,7 +108,7 @@ export default function WishlistPage() {
   };
 
   useEffect(() => {
-    fetchWishlist();
+    queueMicrotask(fetchWishlist);
 
     const refreshWishlist = () => fetchWishlist();
 

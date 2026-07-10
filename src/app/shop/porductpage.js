@@ -483,13 +483,15 @@ export default function ShopPage() {
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
-    setCurrentPage(1);
-    setFilters((prev) => ({
-      ...prev,
-      category: categoryFromUrl,
-      subcategory: subcategoryFromUrl,
-      subcategoryId: "",
-    }));
+    queueMicrotask(() => {
+      setCurrentPage(1);
+      setFilters((prev) => ({
+        ...prev,
+        category: categoryFromUrl,
+        subcategory: subcategoryFromUrl,
+        subcategoryId: "",
+      }));
+    });
   }, [categoryFromUrl, searchFromUrl, subcategoryFromUrl]);
 
   const getCategoryName = useCallback(

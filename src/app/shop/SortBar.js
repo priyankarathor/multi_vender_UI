@@ -74,15 +74,9 @@ export default function SortBar({
   const categoryFromUrl =
     searchParams.get("category") || "All";
 
-  const [activeFilter, setActiveFilter] =
-    useState(categoryFromUrl);
+  const activeFilter = categoryFromUrl;
 
   const dropdownRef = useRef(null);
-
-  // ================= SYNC CATEGORY =================
-  useEffect(() => {
-    setActiveFilter(categoryFromUrl);
-  }, [categoryFromUrl]);
 
   // ================= CLOSE DROPDOWN =================
   useEffect(() => {
@@ -117,8 +111,6 @@ export default function SortBar({
 
   // ================= CATEGORY FILTER =================
   function handleFilter(filter) {
-    setActiveFilter(filter);
-
     const params = new URLSearchParams(
       searchParams.toString()
     );

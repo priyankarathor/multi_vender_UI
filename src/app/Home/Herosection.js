@@ -16,6 +16,7 @@ export default function HeroSection() {
   const [banners, setBanners] = useState([fallbackBanner]);
   const [current, setCurrent] = useState(0);
   const timerRef = useRef(null);
+  const currentIndex = Math.min(current, Math.max(banners.length - 1, 0));
 
   useEffect(() => {
     let isMounted = true;
@@ -44,10 +45,6 @@ export default function HeroSection() {
 
     return () => clearInterval(timerRef.current);
   }, [banners.length]);
-
-  useEffect(() => {
-    if (current >= banners.length) setCurrent(0);
-  }, [banners.length, current]);
 
   const goTo = (index) => {
     clearInterval(timerRef.current);
@@ -84,7 +81,7 @@ export default function HeroSection() {
         <div className="relative w-full h-[240px] sm:h-[340px] rounded-2xl overflow-hidden shadow-md">
           <div
             className="flex w-full h-full transition-transform duration-700 ease-in-out"
-            style={{ transform: `translateX(-${current * 100}%)` }}
+            style={{ transform: `translateX(-${currentIndex * 100}%)` }}
           >
             {banners.map((banner) => (
               <div

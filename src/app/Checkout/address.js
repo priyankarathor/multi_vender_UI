@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { getLoggedInCid, getLoggedInCustomerInfo } from "../apis/customer/customer";
 
 const emptyForm = {
@@ -16,31 +16,28 @@ const emptyForm = {
 };
 
 export default function AddressForm({ onSave, saving }) {
-  const [form, setForm] = useState(emptyForm);
-
-  // Login hone par jo bhi customer details mil sakein (name, mobile,
-  // saved address) unse form ko auto-fill karo. Jo field backend se
-  // nahi milti wo empty hi rahegi -- user usko khud bhar sakta hai.
-  useEffect(() => {
+  const [form, setForm] = useState(() => {
     const cid = getLoggedInCid();
-    if (!cid) return;
+    if (!cid) return emptyForm;
 
     const info = getLoggedInCustomerInfo();
-    if (!info) return;
+    if (!info) return emptyForm;
 
-    setForm((prev) => ({
-      ...prev,
-      fullName: info.fullName || prev.fullName,
-      mobile: info.mobile || prev.mobile,
-      pincode: info.pincode || prev.pincode,
-      houseNumber: info.houseNumber || prev.houseNumber,
-      area: info.area || prev.area,
-      locality: info.locality || prev.locality,
-      city: info.city || prev.city,
-      state: info.state || prev.state,
-      landmark: info.landmark || prev.landmark,
-    }));
-  }, []);
+    // Login hone par jo bhi customer details mil sakein (name, mobile,
+    // saved address) unse form ko auto-fill karo.
+    return {
+      ...emptyForm,
+      fullName: info.fullName || "",
+      mobile: info.mobile || "",
+      pincode: info.pincode || "",
+      houseNumber: info.houseNumber || "",
+      area: info.area || "",
+      locality: info.locality || "",
+      city: info.city || "",
+      state: info.state || "",
+      landmark: info.landmark || "",
+    };
+  });
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });

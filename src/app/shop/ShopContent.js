@@ -21,10 +21,12 @@ export default function ShopContent() {
   });
 
   useEffect(() => {
-    setFilters((prev) => ({
-      ...prev,
-      category: urlCategory,
-    }));
+    queueMicrotask(() => {
+      setFilters((prev) => ({
+        ...prev,
+        category: urlCategory,
+      }));
+    });
   }, [urlCategory]);
 
   return (

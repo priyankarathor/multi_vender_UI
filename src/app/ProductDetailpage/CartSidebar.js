@@ -14,19 +14,22 @@ export default function CartSidebar({ isOpen, onClose }) {
     if (!isOpen) return;
 
     let active = true;
-    setLoading(true);
+    const loadCart = async () => {
+      setLoading(true);
 
-    // cid/divid manually decide karne ki zaroorat nahi -- fetchNormalizedCartItems()
-    // (aur uske andar getCartItems()) khud hi cid = getLoggedInCid() try karta hai,
-    // jo sirf tabhi value deta hai jab user login ho. Agar cid nahi mila
-    // (matlab login nahi hai) tabhi divid = getCartDeviceId() fallback use hota hai.
-    // Yehi if-else pattern add-to-cart (createCartItem/updateCartItem) mein bhi hai.
-    fetchNormalizedCartItems()
-      .then((items) => {
+      // cid/divid manually decide karne ki zaroorat nahi -- fetchNormalizedCartItems()
+      // (aur uske andar getCartItems()) khud hi cid = getLoggedInCid() try karta hai.
+      try {
+        const items = await fetchNormalizedCartItems();
         if (active) setCartItems(items);
-      })
-      .catch((err) => console.error("CartSidebar: fetch failed", err))
-      .finally(() => active && setLoading(false));
+      } catch (err) {
+        console.error("CartSidebar: fetch failed", err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    queueMicrotask(loadCart);
 
     return () => {
       active = false;

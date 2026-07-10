@@ -121,7 +121,7 @@ export default function OrdersPage() {
         </div>
         <p className="text-gray-700 font-semibold">No orders yet</p>
         <p className="text-sm text-gray-500 mt-1">
-          Once you place an order, it'll show up here.
+          Once you place an order, it&apos;ll show up here.
         </p>
         <Link
           href="/shop"
@@ -298,7 +298,7 @@ export default function OrdersPage() {
                 More finds are waiting for you
               </h2>
               <p className="mt-2 text-sm leading-6 text-white/75">
-                "A good order makes today easier. A great next find makes tomorrow better."
+                &ldquo;A good order makes today easier. A great next find makes tomorrow better.&rdquo;
               </p>
             </div>
 

@@ -90,7 +90,7 @@ export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState("");
   const [categories, setCategories] = useState([]);
 
-  const [customer, setCustomer] = useState(null);
+  const [customer, setCustomer] = useState(() => getStoredCustomer());
 
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [userModalOpen, setUserModalOpen] = useState(false);
@@ -125,11 +125,6 @@ export default function Navbar() {
   const isActive = (path) => pathname === path;
 
   useEffect(() => {
-    getAllCategories();
-    getCustomerFromStorage();
-  }, []);
-
-  useEffect(() => {
     const syncCustomer = () => {
       setCustomer(getStoredCustomer());
     };
@@ -162,7 +157,7 @@ export default function Navbar() {
     };
   }, []);
 
-  const getAllCategories = async () => {
+  async function getAllCategories() {
     try {
       const response = await getCategories();
 
@@ -194,11 +189,11 @@ export default function Navbar() {
         { _id: "furniture", name: "Furniture" },
       ]);
     }
-  };
+  }
 
-  const getCustomerFromStorage = () => {
-    setCustomer(getStoredCustomer());
-  };
+  useEffect(() => {
+    getAllCategories();
+  }, []);
 
   const handleSearchSubmit = (event) => {
     event.preventDefault();
