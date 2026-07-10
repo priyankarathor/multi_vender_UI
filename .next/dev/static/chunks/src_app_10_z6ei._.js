@@ -27,7 +27,7 @@ const bestSellers = [
         oldPrice: "$169",
         rating: 4.9,
         image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=1200&auto=format&fit=crop",
-        tag: "Best Seller"
+        tag: "Best Seller account"
     },
     {
         id: 2,
@@ -59,11 +59,11 @@ const bestSellers = [
 ];
 function BestSellersSection() {
     const $ = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$compiler$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["c"])(3);
-    if ($[0] !== "418b966a094d796bb0c510ab16cf9df9b4553e0a8e6bfd82052c2d75e9d8b25f") {
+    if ($[0] !== "0f6dd6935e06c79ed7693aef133664c9277f920f093aef374a9acc8d88d9f609") {
         for(let $i = 0; $i < 3; $i += 1){
             $[$i] = Symbol.for("react.memo_cache_sentinel");
         }
-        $[0] = "418b966a094d796bb0c510ab16cf9df9b4553e0a8e6bfd82052c2d75e9d8b25f";
+        $[0] = "0f6dd6935e06c79ed7693aef133664c9277f920f093aef374a9acc8d88d9f609";
     }
     let t0;
     if ($[1] === Symbol.for("react.memo_cache_sentinel")) {
