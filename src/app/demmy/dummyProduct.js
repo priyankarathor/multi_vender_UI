@@ -1,5 +1,6 @@
 // src/app/apis/products/dummyProduct.js
-
+// all data for git testing 
+//
 export const rawDummyProduct = {
   productName: "Titan Neo Analog Watch",
   itemName: "Titan Neo Analog Watch for Men",

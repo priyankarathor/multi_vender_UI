@@ -192,7 +192,7 @@ export default function Navbar() {
   }
 
   useEffect(() => {
-    getAllCategories();
+    queueMicrotask(getAllCategories);
   }, []);
 
   const handleSearchSubmit = (event) => {
