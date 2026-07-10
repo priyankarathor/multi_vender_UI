@@ -14,7 +14,7 @@ export default function HomePage() {
       <ProductGridSection />
       <ProductSlider />
       <TrendingProductsSection />
-      <DealsOfferBanner />
+      {/* <DealsOfferBanner /> */}
         <ShopByCategory />
         <BestSellersSection />
         <NewsletterSection />

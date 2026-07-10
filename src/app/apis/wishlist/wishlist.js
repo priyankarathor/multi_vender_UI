@@ -1,8 +1,6 @@
 import { api } from "../baseurl/baseurl";
 import { getLoggedInCid } from "../customer/customer";
 
-const LOCAL_WISHLIST_KEY = "wishlistItems";
-
 export function getWishlistDeviceId() {
   if (typeof window === "undefined") return "";
 
@@ -15,7 +13,8 @@ export function getWishlistDeviceId() {
     }
 
     return deviceId;
-  } catch {
+  } catch (err) {
+    console.warn("getWishlistDeviceId failed:", err?.message);
     return "";
   }
 }
@@ -35,14 +34,19 @@ export function getApiWishlistList(payload) {
   }
 }
 
+const makeEmptyWishlistResponse = () => ({
+  data: {
+    success: true,
+    data: [],
+  },
+});
+
 const makeWishlistResponse = (items = []) => ({
   data: {
     success: true,
     data: items,
   },
 });
-
-const makeEmptyWishlistResponse = () => makeWishlistResponse([]);
 
 const is404 = (err) => err?.response?.status === 404;
 
@@ -80,102 +84,12 @@ export function getWishlistVendorId(item) {
   return typeof vendor === "object" ? vendor?._id || null : vendor || null;
 }
 
-function getLocalWishlistItems() {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const saved = JSON.parse(localStorage.getItem(LOCAL_WISHLIST_KEY) || "[]");
-    return Array.isArray(saved) ? saved : [];
-  } catch {
-    return [];
-  }
-}
-
-function setLocalWishlistItems(items = []) {
-  if (typeof window === "undefined") return;
-
-  try {
-    localStorage.setItem(LOCAL_WISHLIST_KEY, JSON.stringify(items));
-  } catch {}
-}
-
 function dispatchWishlistUpdated() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event("wishlistUpdated"));
 }
 
-function isSameWishlistItem(a, b) {
-  const aPid = String(getWishlistProductId(a) || "");
-  const bPid = String(getWishlistProductId(b) || "");
-
-  const aVariant = String(getWishlistVariantId(a) || "");
-  const bVariant = String(getWishlistVariantId(b) || "");
-
-  if (!aPid || !bPid) return false;
-
-  return aPid === bPid && aVariant === bVariant;
-}
-
-function upsertLocalWishlistItem(item) {
-  const savedItems = getLocalWishlistItems();
-
-  const existsIndex = savedItems.findIndex((saved) =>
-    isSameWishlistItem(saved, item)
-  );
-
-  let nextItems;
-
-  if (existsIndex >= 0) {
-    nextItems = savedItems.map((saved, index) =>
-      index === existsIndex
-        ? {
-            ...saved,
-            ...item,
-            qty: item?.qty || item?.quantity || saved?.qty || saved?.quantity || 1,
-          }
-        : saved
-    );
-  } else {
-    nextItems = [
-      ...savedItems,
-      {
-        ...item,
-        _id: item?._id || `local-wishlist-${Date.now()}`,
-        qty: item?.qty || item?.quantity || 1,
-      },
-    ];
-  }
-
-  setLocalWishlistItems(nextItems);
-  dispatchWishlistUpdated();
-
-  return nextItems;
-}
-
-function removeLocalWishlistItem(idOrItem) {
-  const savedItems = getLocalWishlistItems();
-
-  const removedId =
-    typeof idOrItem === "object" ? idOrItem?._id : idOrItem;
-
-  const removedPid =
-    typeof idOrItem === "object" ? getWishlistProductId(idOrItem) : null;
-
-  const nextItems = savedItems.filter((item) => {
-    if (removedId && String(item?._id) === String(removedId)) return false;
-
-    if (removedPid) {
-      return String(getWishlistProductId(item)) !== String(removedPid);
-    }
-
-    return true;
-  });
-
-  setLocalWishlistItems(nextItems);
-  dispatchWishlistUpdated();
-
-  return nextItems;
-}
+// ---------------- CREATE ----------------
 
 export async function createWishlistItem({
   cid = getLoggedInCid(),
@@ -183,78 +97,38 @@ export async function createWishlistItem({
   variantId = null,
   vendorId = null,
   qty = 1,
+  offerDiscount = 0,
   divid,
-  productData = null,
 } = {}) {
   const finalDivid = divid || getWishlistDeviceId();
 
-  const localItem = {
-    _id: `local-wishlist-${pid || Date.now()}`,
+  const payload = {
     cid,
-    pid: productData || pid,
+    pid,
     divid: finalDivid,
     qty,
     variantId,
-    venderid: vendorId,
-    vendorId,
+    offerDiscount,
+    venderid: vendorId, // backend field typo, mirrors cart.js
   };
 
-  upsertLocalWishlistItem(localItem);
+  // NOTE: backend route is genuinely spelled "wishrlist" (typo on their side),
+  // confirmed via Postman - not a mistake here, matching their actual route.
+  const res = await api.post("/wishrlist/create", payload);
 
-  try {
-    const res = await api.post("/wishlist/create", {
-      cid,
-      pid,
-      divid: finalDivid,
-      qty,
-      variantId,
-      venderid: vendorId,
-    });
+  dispatchWishlistUpdated();
 
-    const apiItem =
-      res?.data?.data ||
-      res?.data?.wishlist ||
-      res?.data?.item ||
-      res?.data;
-
-    if (apiItem && typeof apiItem === "object") {
-      upsertLocalWishlistItem({
-        ...localItem,
-        ...apiItem,
-      });
-    }
-
-    return res;
-  } catch (err) {
-    if (is404(err)) {
-      return makeWishlistResponse([localItem]);
-    }
-
-    console.warn("createWishlistItem API failed, local wishlist saved only");
-    return makeWishlistResponse([localItem]);
-  }
+  return res;
 }
 
 export const addWishlistItem = createWishlistItem;
 
+// ---------------- UPDATE ----------------
+
 export async function updateWishlistItem(id, data = {}) {
-  if (!id) return makeEmptyWishlistResponse();
-
-  const savedItems = getLocalWishlistItems();
-
-  const nextItems = savedItems.map((item) =>
-    String(item?._id) === String(id)
-      ? {
-          ...item,
-          ...data,
-          qty: data.qty ?? data.quantity ?? item.qty ?? item.quantity ?? 1,
-          quantity: data.qty ?? data.quantity ?? item.qty ?? item.quantity ?? 1,
-        }
-      : item
-  );
-
-  setLocalWishlistItems(nextItems);
-  dispatchWishlistUpdated();
+  if (!id) {
+    return makeEmptyWishlistResponse();
+  }
 
   const payload = {
     cid: data.cid ?? getLoggedInCid(),
@@ -262,93 +136,205 @@ export async function updateWishlistItem(id, data = {}) {
     divid: data.divid || data.deviceId || getWishlistDeviceId(),
     qty: data.qty ?? data.quantity ?? 1,
     variantId: data.variantId ?? getWishlistVariantId(data),
+    offerDiscount: data.offerDiscount ?? data.discount ?? 0,
     venderid: data.vendorId ?? getWishlistVendorId(data),
   };
 
   try {
-    return await api.put(`/wishlist/update/${id}`, payload);
+    const res = await api.put(`/wishrlist/update/${id}`, payload);
+    dispatchWishlistUpdated();
+    return res;
   } catch (err) {
     if (is404(err)) {
-      return makeWishlistResponse(nextItems);
+      return makeEmptyWishlistResponse();
     }
 
-    console.warn("updateWishlistItem API failed, local wishlist updated only");
-    return makeWishlistResponse(nextItems);
+    console.error("updateWishlistItem failed:", id, err?.message);
+    throw err;
   }
 }
 
-export async function deleteWishlistItem(id) {
-  if (!id) return makeEmptyWishlistResponse();
+// ---------------- DELETE ----------------
 
-  const nextItems = removeLocalWishlistItem(id);
+export async function deleteWishlistItem(id) {
+  if (!id) {
+    return makeEmptyWishlistResponse();
+  }
 
   try {
-    return await api.delete(`/wishlist/delete/${id}`);
+    const res = await api.delete(`/wishrlist/delete/${id}`);
+    dispatchWishlistUpdated();
+    return res;
   } catch (err) {
     if (is404(err)) {
-      return makeWishlistResponse(nextItems);
+      return makeEmptyWishlistResponse();
     }
 
-    console.warn("deleteWishlistItem API failed, local wishlist removed only");
-    return makeWishlistResponse(nextItems);
+    console.error("deleteWishlistItem failed:", id, err?.message);
+    throw err;
   }
 }
 
 export const removeWishlistItem = deleteWishlistItem;
 
-/*
-  IMPORTANT:
-  Ye dono functions ab GET API call nahi karenge.
-  Isi se red 404 stop hoga:
-  /wishlist/customer/:cid
-  /wishlist/device/:divid
-*/
+// ---------------- READ ----------------
+// Backend has no dedicated /wishlist/customer/:cid route.
+// Actual available route is GET /wishlist (cid passed as query param).
 
-export async function getCustomerWishlistItems() {
-  return makeWishlistResponse(getLocalWishlistItems());
+export async function getCustomerWishlistItems(cid = getLoggedInCid()) {
+  if (!cid) {
+    return makeEmptyWishlistResponse();
+  }
+
+  try {
+    // cache-busting, same reason as cart.js: avoid stale cached GETs
+    return await api.get(`/wishrlist`, {
+      params: { cid, _t: Date.now() },
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    });
+  } catch (err) {
+    if (is404(err)) {
+      return makeEmptyWishlistResponse();
+    }
+
+    return makeEmptyWishlistResponse();
+  }
 }
 
-export async function getDeviceWishlistItems() {
-  return makeWishlistResponse(getLocalWishlistItems());
+export async function getDeviceWishlistItems(divid = getWishlistDeviceId()) {
+  if (!divid) {
+    return makeEmptyWishlistResponse();
+  }
+
+  try {
+    return await api.get(`/wishrlist/device/${divid}`, {
+      params: { _t: Date.now() },
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    });
+  } catch (err) {
+    if (is404(err)) {
+      return makeEmptyWishlistResponse();
+    }
+
+    return makeEmptyWishlistResponse();
+  }
+}
+
+// Main function for Wishlist page / product details / navbar heart icon.
+// Same rule as cart.js: agar cid hai to SIRF cid wali API se data aayega,
+// warna divid wali API se.
+export async function getWishlistItems({
+  cid = getLoggedInCid(),
+  divid = getWishlistDeviceId(),
+} = {}) {
+  try {
+    if (cid) {
+      const customerRes = await getCustomerWishlistItems(cid);
+      const customerItems = getApiWishlistList(customerRes.data);
+      return makeWishlistResponse(customerItems);
+    }
+
+    if (divid) {
+      const deviceRes = await getDeviceWishlistItems(divid);
+      const deviceItems = getApiWishlistList(deviceRes.data);
+      return makeWishlistResponse(deviceItems);
+    }
+
+    return makeEmptyWishlistResponse();
+  } catch {
+    return makeEmptyWishlistResponse();
+  }
 }
 
 export async function getAllWishlistItems() {
-  return makeWishlistResponse(getLocalWishlistItems());
+  return getWishlistItems();
 }
 
-export async function getWishlistByCidOrDevice() {
-  return makeWishlistResponse(getLocalWishlistItems());
-}
+export const getWishlistByCidOrDevice = getWishlistItems;
 
-/*
-  Login/signup ke baad sync safe rakha hai.
-  Backend GET nahi karega, sirf local items ko customer id ke saath update karega.
-*/
+// ---------------- SYNC ON LOGIN/SIGNUP ----------------
+// Mirrors syncDeviceCartToCustomer from cart.js: move device-scoped
+// wishlist items over to the now-logged-in customer, skipping duplicates.
 
-export async function syncDeviceWishlistToCustomer(cid) {
-  if (!cid) {
+export async function syncDeviceWishlistToCustomer(
+  cid,
+  divid = getWishlistDeviceId()
+) {
+  if (!cid || !divid) {
     return {
       success: false,
-      message: "cid missing",
+      message: "cid/divid missing",
     };
   }
 
   try {
-    const savedItems = getLocalWishlistItems();
+    const deviceRes = await getDeviceWishlistItems(divid);
+    const deviceItems = getApiWishlistList(deviceRes.data);
 
-    const nextItems = savedItems.map((item) => ({
-      ...item,
-      cid,
-    }));
+    if (deviceItems.length === 0) {
+      return {
+        success: true,
+        migrated: 0,
+      };
+    }
 
-    setLocalWishlistItems(nextItems);
+    const customerRes = await getCustomerWishlistItems(cid);
+    const customerItems = getApiWishlistList(customerRes.data);
+
+    const findMatchingCustomerItem = (item) => {
+      const pid = getWishlistProductId(item);
+      const variantId = getWishlistVariantId(item);
+
+      return customerItems.find(
+        (ci) =>
+          String(getWishlistProductId(ci)) === String(pid) &&
+          String(getWishlistVariantId(ci)) === String(variantId)
+      );
+    };
+
+    let migratedCount = 0;
+
+    for (const item of deviceItems) {
+      try {
+        const existing = findMatchingCustomerItem(item);
+
+        if (!existing) {
+          const vendorId = getWishlistVendorId(item);
+
+          await createWishlistItem({
+            cid,
+            pid: getWishlistProductId(item),
+            variantId: getWishlistVariantId(item),
+            divid,
+            qty: item?.qty || item?.quantity || 1,
+            offerDiscount: item?.offerDiscount || item?.discount || 0,
+            vendorId,
+          });
+        }
+
+        if (item?._id) {
+          await deleteWishlistItem(item._id);
+        }
+
+        migratedCount++;
+      } catch (itemErr) {
+        console.warn(
+          "Wishlist item migrate failed:",
+          item?._id,
+          itemErr?.message
+        );
+      }
+    }
+
     dispatchWishlistUpdated();
 
     return {
       success: true,
-      migrated: nextItems.length,
+      migrated: migratedCount,
     };
   } catch (err) {
+    console.warn("syncDeviceWishlistToCustomer failed:", err?.message);
+
     return {
       success: false,
       message: err?.message || "sync failed",

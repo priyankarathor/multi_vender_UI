@@ -7,36 +7,36 @@ import { ArrowRight, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 
-import {
-  fallbackBanner,
-  fetchBanners,
-  getBannersForCategory,
-  hasBannerForCategory,
-} from "../apis/banners/banners";
+// import {
+//   fallbackBanner,
+//   fetchBanners,
+//   getBannersForCategory,
+//   hasBannerForCategory,
+// } from "../apis/banners/banners";
 
-const fallbackSlides = [
-  {
-    img: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=1400&auto=format&fit=crop",
-    title: "Smart Watch Series",
-    desc: "Minimal design. Maximum performance.",
-    price: "₹999",
-    tag: "NEW DROP",
-  },
-  {
-    img: "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?q=80&w=1400&auto=format&fit=crop",
-    title: "Noise Cancelling Audio",
-    desc: "Pure sound. Zero distractions.",
-    price: "₹1,499",
-    tag: "TRENDING",
-  },
-  {
-    img: "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?q=80&w=1400&auto=format&fit=crop",
-    title: "Urban Streetwear",
-    desc: "Designed for everyday confidence.",
-    price: "₹799",
-    tag: "HOT DEAL",
-  },
-];
+// const fallbackSlides = [
+//   {
+//     img: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=1400&auto=format&fit=crop",
+//     title: "Smart Watch Series",
+//     desc: "Minimal design. Maximum performance.",
+//     price: "₹999",
+//     tag: "NEW DROP",
+//   },
+//   {
+//     img: "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?q=80&w=1400&auto=format&fit=crop",
+//     title: "Noise Cancelling Audio",
+//     desc: "Pure sound. Zero distractions.",
+//     price: "₹1,499",
+//     tag: "TRENDING",
+//   },
+//   {
+//     img: "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?q=80&w=1400&auto=format&fit=crop",
+//     title: "Urban Streetwear",
+//     desc: "Designed for everyday confidence.",
+//     price: "₹799",
+//     tag: "HOT DEAL",
+//   },
+// ];
 
 function getOfferText(discountPercentage) {
   return discountPercentage > 0 ? `${discountPercentage}% OFF` : "HOT DEAL";
