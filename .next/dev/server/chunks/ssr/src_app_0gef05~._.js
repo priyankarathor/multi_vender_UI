@@ -25,7 +25,7 @@ const bestSellers = [
         oldPrice: "$169",
         rating: 4.9,
         image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=1200&auto=format&fit=crop",
-        tag: "Best Seller"
+        tag: "Best Seller account"
     },
     {
         id: 2,
