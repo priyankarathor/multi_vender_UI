@@ -1,0 +1,1 @@
+{"version":3,"sources":["../../../../src/app/ProductDetailpage/loading.js"],"sourcesContent":["import { ProductDetailSkeleton } from \"../component/PageSkeleton\";\n\nexport default function Loading() {\n  return <ProductDetailSkeleton />;\n}\n"],"names":["Loading"],"mappings":"uDAAA,EAAA,EAAA,CAAA,CAAA,wBAEe,SAASA,EACtB,MAAO,CAAA,EAAA,EAAA,GAAA,EAAC,EAAA,qBAAqB,CAAA,CAAA,EAC/B"}

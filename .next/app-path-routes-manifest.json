@@ -1,0 +1,14 @@
+{
+  "/Addtocard/page": "/Addtocard",
+  "/Checkout/page": "/Checkout",
+  "/Home/page": "/Home",
+  "/ProductDetailpage/[id]/page": "/ProductDetailpage/[id]",
+  "/ProductDetailpage/page": "/ProductDetailpage",
+  "/Wishlist/page": "/Wishlist",
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/api/send-whatsapp-otp/route": "/api/send-whatsapp-otp",
+  "/favicon.ico/route": "/favicon.ico",
+  "/page": "/",
+  "/shop/page": "/shop"
+}

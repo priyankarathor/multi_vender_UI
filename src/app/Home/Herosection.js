@@ -122,23 +122,17 @@ export default function HeroSection() {
   }, [slides.length]);
 
   return (
-    <section className="relative overflow-hidden bg-[#eaeded]">
 
-      {/* BACKGROUND */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#f8f8f8] via-[#f3f3f3] to-[#eaeded]" />
-
-      {/* GRID EFFECT */}
-      <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(to_right,#000_1px,transparent_1px),linear-gradient(to_bottom,#000_1px,transparent_1px)] bg-[size:80px_80px]" />
-
-      <div className="relative w-full max-w-[1550px] mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-3">
-
-        {/* HERO WRAPPER */}
-        <div className="relative overflow-hidden rounded-2xl sm:rounded-[28px] lg:rounded-[34px] bg-white border border-black/5 shadow-[0_15px_60px_rgba(0,0,0,0.08)]">
-
-          {/* SLIDER */}
-          <div className="relative">
-
-            {slides.map((slide, index) => (
+    //testing details
+    
+    <section className="w-full">
+      <div className="max-w-[1450px] mx-auto px-3 sm:px-6 lg:px-10 pt-4">
+        <div className="relative w-full h-[240px] sm:h-[340px] rounded-2xl overflow-hidden shadow-md">
+          <div
+            className="flex w-full h-full transition-transform duration-700 ease-in-out"
+            style={{ transform: `translateX(-${current * 100}%)` }}
+          >
+            {banners.map((banner) => (
               <div
                 key={slide.id}
                 className={`transition-all duration-700 ease-in-out ${
