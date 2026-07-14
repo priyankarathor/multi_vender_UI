@@ -1,0 +1,15 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/Addtocard/layout,_N_T_/Addtocard/page,_N_T_/Addtocard"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/Addtocard/__PAGE__",
+    "/Addtocard",
+    "/_index",
+    "/_head"
+  ]
+}

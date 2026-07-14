@@ -1,0 +1,3 @@
+{
+  "/api/send-whatsapp-otp/route": "app/api/send-whatsapp-otp/route.js"
+}
