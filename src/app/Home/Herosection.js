@@ -91,7 +91,7 @@ export default function HeroSection() {
 
   useEffect(() => {
     let isMounted = true;
-
+// testing
     fetchBanners()
       .then((banners) => {
         if (!isMounted) return;
