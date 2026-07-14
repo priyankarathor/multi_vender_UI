@@ -17,7 +17,7 @@ import {
   fallbackBanner,
   fetchBanners,
   getBannersForCategory,
-} from "../apis/banners/banners";
+} from "../apis/banners/banners.js";
 
 const fallbackSlides = [
   {
@@ -91,7 +91,7 @@ export default function HeroSection() {
 
   useEffect(() => {
     let isMounted = true;
-
+// testing
     fetchBanners()
       .then((banners) => {
         if (!isMounted) return;
@@ -122,9 +122,6 @@ export default function HeroSection() {
   }, [slides.length]);
 
   return (
-
-    //testing details
-    
     <section className="w-full">
       <div className="max-w-[1450px] mx-auto px-3 sm:px-6 lg:px-10 pt-4">
         <div className="relative w-full h-[240px] sm:h-[340px] rounded-2xl overflow-hidden shadow-md">
@@ -132,7 +129,7 @@ export default function HeroSection() {
             className="flex w-full h-full transition-transform duration-700 ease-in-out"
             style={{ transform: `translateX(-${current * 100}%)` }}
           >
-            {banners.map((banner) => (
+            {slides.map((slide, index) => (
               <div
                 key={slide.id}
                 className={`transition-all duration-700 ease-in-out ${
