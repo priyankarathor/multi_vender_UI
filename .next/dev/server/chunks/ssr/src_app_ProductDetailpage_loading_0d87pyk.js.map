@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///E:/Amazon-webclone-main/Amazon-webclone-main/src/app/ProductDetailpage/loading.js"],"sourcesContent":["import { ProductDetailSkeleton } from \"../component/PageSkeleton\";\n\nexport default function Loading() {\n  return <ProductDetailSkeleton />;\n}\n"],"names":["Loading"],"mappings":";;;;;AAAA;;;AAEe,SAASA;IACtB,qBAAO,8OAAC,gKAAqB;;;;;AAC/B"}}]
-}
